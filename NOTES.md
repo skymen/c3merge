@@ -26,7 +26,7 @@ packaging/release · `[docs]`
 
 ## Later
 
-- [core] Renames of event variables and functions, same system (skymen 2026-09-24): globals are bare names project-wide; a local variable's rename only reaches its scope (its parent event's subtree, unless a nearer local shadows it) and different scopes reuse names; functions: `callFunction` and `Functions.name(...)`. Parameter changes: the renaming side is always right (C3 inserts the new parameter's default in every call); mirror it on the other side's calls by parameter sid (insert defaults, drop removed, reorder), flag a call whose argument count doesn't match the old signature. Layers and animations are strings: nothing to do
+- [core] Renames of event variables and functions: explored, design and 3 scope questions for skymen ([tasks/event-renames.md](tasks/event-renames.md))
 
 - [profiles] Script events that store their code as one string (`"script": "…\n…"`) should get the line merge too; key timeline tracks by what they animate ([tasks/profiles.md](tasks/profiles.md#later))
 - [check] Repair mode: `check --fix` for the classes C3 does *not* repair itself (dedupe sids, drop dangling references with a report)
