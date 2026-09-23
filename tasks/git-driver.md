@@ -86,3 +86,19 @@ test that scripts `git rebase` over a fixture repo.
 ## Per-project vs per-machine (decided)
 Attributes: per project, committed. Driver config: per machine (one line) or `--local`.
 No global attributes file ever.
+
+## Finish step
+**Status:** proposed (2026-09-23). A rename on one side must reach every file, but git only
+calls the driver for files both sides changed. What git runs when a merge ends (tested on
+git 2.50, no config-based hooks there, so hooks go in each clone's `.git/hooks`):
+- merge stopped on conflicts, finished with `git commit`: `pre-commit` runs, and files it
+  stages are part of the merge commit;
+- clean merge: `pre-merge-commit` runs after the commit's tree is built (staged fixes are
+  left out), then `post-merge`: the fix needs an amend of the merge commit;
+- rebase: only `post-commit` per pick and `post-rewrite` at the end; single cherry-pick:
+  only `post-commit`, which can't tell it's a cherry-pick.
+Plan: `c3merge init` installs hooks that call `c3merge finish` (appended to existing
+hooks, never replacing them). `finish` works out both sides (MERGE_HEAD/HEAD, or the merge
+commit's parents), rewrites leftover references to names renamed on either side (only
+names no type has in the merged project) in every C3 file, stages or amends, then runs
+`check`, which also settles "when to run check after a merge".

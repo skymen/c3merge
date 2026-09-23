@@ -45,6 +45,21 @@ passes the engine each side's changes:
   template flags for those variables), and keys every element of the list gained on that
   side while none had them at base (opening in a newer release gives every instance a
   `sid` and `tags`).
+### How a change is known to be automatic
+Each rule is about *what* changed and *where it comes from*, checked on the project's own
+files, never a guess on content:
+- a reference now naming Y where base named X, when object type/family sid S is named X at
+  base and Y on that side (the rename is in the object type's file);
+- an instance variable, behavior or effect key that the instance's object type (or a family
+  it belongs to) doesn't have at base and has on that side, plus the template flags for
+  those variables. Values aren't checked (kept simple, skymen 2026-09-23); in the real
+  merges all 154 were the default or the same on every other instance of the type;
+- a key that every element of the list has on that side and no element had at base (a
+  person editing instances can change values, not add a key to all of them; a newer
+  release does). Values aren't checked (new sids are random).
+Only used to decide "deleted on one side vs changed on the other"; anywhere else these
+changes merge like any other.
+
 Limit: git only calls the driver for files both sides changed. A file only one side
 changed is taken as is, even if it names a type the other side renamed (`85c85d2a`:
 MT2-2, Subhub-Trials1, Subhub-Trials2, fixed by hand in "merge fix" `46e44c7f`). Needs a

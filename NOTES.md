@@ -14,7 +14,8 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [check] Renames in files git merged without the driver (only one side changed them): `check` should say "type X doesn't exist; renamed to Y on the other side of this merge" and `check --fix` apply it (`85c85d2a`: MT2-2, Subhub-Trials1/2) ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#project-context-srccontextts-skymen-2026-09-23))
+- [driver] Finish step when a merge ends: replay renames project-wide (files git merged without the driver still name the old type: `85c85d2a` MT2-2, Subhub-Trials1/2) and run `check`. Via hooks `c3merge init` installs per clone: pre-commit (merge finished by hand: staged fixes land in the merge commit), post-merge (clean merge: amend), post-rewrite (rebase). Tested on git 2.50; waiting on skymen (amend vs separate commit) ([tasks/git-driver.md](tasks/git-driver.md#finish-step))
+- [docs] Artifact for skymen: every case where c3merge helps and exactly how it works (requested 2026-09-23)
 
 ## Normal
 
