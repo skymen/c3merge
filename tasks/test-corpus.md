@@ -18,6 +18,24 @@ duplicate instance uids. Typical conflicts:
 - event sheets: both sides replaced the same condition, each with a new sid.
 - layouts: mass sid changes (e.g. 855 hunks in `mainHub.json` from `instanceFolderItem`
   sids).
+### What went wrong when people resolved them (2026-09-23)
+Git doesn't record conflicts, so this compares git's merge of each triple with what was
+committed, plus the later "merge fix" commits:
+- 4 merges committed an **invalid** `project.c3proj` (`0373af85`, `bed9c447`, `685afb0b`,
+  `9d716e63`): a comma lost while hand-resolving an `items` conflict. Fixed later by
+  `7cd4557b`, `85b36d91`, `b371a45e`, `f2a6dbd7`.
+- Duplicated or stale folder items after a merge (`SpecialSpawner` twice in `a96c8918`;
+  `redFlah`, `testSkin`, `footstepDecal*` removed later by hand).
+- 18 conflicted files were resolved by taking one side whole, several losing the other
+  side's work: a script action (`4574bec8` E_game), an include (`e4beedbc` I_game), a
+  layout entry (`3ddb5929`), effect settings, 3D instance values (`17afe017`, followed by
+  "merge fix" `46e44c7f`).
+- Big layout rewrites in "merge fix" commits (`0aff1bfb`, `a5708d20`, `06d14f43`, all
+  `Testing Grounds.json`).
+Of 936 files, git merged 836 cleanly and they were kept as is; 78 conflicts were merged
+by hand, 18 by taking one side, 4 clean merges were edited during the merge.
+Every one of the c3proj failures is the set-union case c3merge resolves by itself.
+
 Things the survey must know: `instanceFolderItem.sid` repeats its instance's sid;
 `sceneGraphData` and `scene-graphs-folder-root.items` hold uid/sid references, not
 identities.

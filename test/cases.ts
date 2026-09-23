@@ -2,6 +2,7 @@
 // edits a copy of a base file for ours and for theirs, then says what the merge must give:
 // - `merged`: a clean merge; the expected file is base with that edit, byte for byte in C3's
 //   format;
+// - `warnings`: order the engine couldn't be sure of (the merge is still clean);
 // - `conflicts`: the conflict paths the engine must report, plus `takeOurs` / `takeTheirs`,
 //   the file you get by resolving every marker hunk to that side (must be valid JSON equal
 //   to base with that edit).
@@ -18,6 +19,7 @@ export interface Case {
   theirs: Edit;
   merged?: Edit;
   conflicts?: string[];
+  warnings?: string[]; // ambiguous order: merged anyway, reported (paths of the lists)
   takeOurs?: Edit;
   takeTheirs?: Edit;
 }
@@ -146,8 +148,8 @@ export const CASES: Case[] = [
   {
     name: "instances added at the same spot on both sides (z-order unknown)",
     file: L1, ours: addInst(50, "end", 11), theirs: addInst(60, "end", 12),
-    conflicts: [`${L1_LAYER}.instances`],
-    takeOurs: addInst(50, "end", 11), takeTheirs: addInst(60, "end", 12),
+    merged: both(addInst(50, "end", 11), addInst(60, "end", 12)),
+    warnings: [`${L1_LAYER}.instances`],
   },
   {
     name: "the same instance added on both sides, identical",
@@ -184,8 +186,8 @@ export const CASES: Case[] = [
   {
     name: "moved differently on both sides",
     file: L1, ours: moveInst(7, 0), theirs: moveInst(2, 2),
-    conflicts: [`${L1_LAYER}.instances`],
-    takeOurs: moveInst(7, 0), takeTheirs: moveInst(2, 2),
+    merged: moveInst(7, 0),
+    warnings: [`${L1_LAYER}.instances`],
   },
 
   // ── event sheets (execution order) ──────────────────────────────────────────────────
@@ -197,8 +199,8 @@ export const CASES: Case[] = [
   {
     name: "events appended on both sides (execution order unknown)",
     file: ES1, ours: addEvent(111, "end"), theirs: addEvent(222, "end"),
-    conflicts: ["events"],
-    takeOurs: addEvent(111, "end"), takeTheirs: addEvent(222, "end"),
+    merged: both(addEvent(111, "end"), addEvent(222, "end")),
+    warnings: ["events"],
   },
   {
     name: "different actions of one event edited",
@@ -209,6 +211,7 @@ export const CASES: Case[] = [
   },
   {
     // Seen in real merges: both sides replaced the same condition, each with a new sid.
+    // Not an order question: keeping both would AND them.
     name: "the same condition replaced on both sides (new sids)",
     file: ES1,
     ours: (v) => { block(v).conditions[0] = { id: "every-tick", objectClass: "System", sid: 1 }; },

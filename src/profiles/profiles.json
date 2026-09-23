@@ -1,0 +1,103 @@
+{
+  "$comment": [
+    "How c3merge merges each C3 file kind. Evidence: reports/profile-survey.md (49 projects) and tasks/profiles.md.",
+    "Keys are list/object paths inside a file: `a.b[]` is the list at a.b, `[]` any element; recursive nesting",
+    "(sub-events, sub-layers, subfolders) is collapsed, and `**.x[]` matches a list named x at any depth.",
+    "A list rule: `id` = identity keys tried in order ('a+b' = composite, 'content' = the element's whole value),",
+    "`order` = 'ordered' (position is meaningful: ambiguous order is merged and reported as a warning) or",
+    "'set' (order means nothing: C3 sorts it or only uses it for display).",
+    "`atomic` = merge as one value (changed on both sides → conflict). `scalar: 'max'` = take the larger number.",
+    "Lists not listed here: objects that all have a uid (or else all a sid) → matched by it, ordered;",
+    "anything else → atomic. Lists whose identities aren't unique in some version → atomic."
+  ],
+  "kinds": [
+    {
+      "kind": "project",
+      "match": "\\.c3proj$",
+      "rules": {
+        "savedWithRelease": { "scalar": "max" },
+        "usedAddons[]": { "id": ["type+id"], "order": "set" },
+        "objectTypes.items[]": { "id": ["content"], "order": "set" },
+        "objectTypes.subfolders[]": { "id": ["name"], "order": "set" },
+        "objectTypes.subfolders[].items[]": { "id": ["content"], "order": "set" },
+        "eventSheets.items[]": { "id": ["content"], "order": "set" },
+        "eventSheets.subfolders[]": { "id": ["name"], "order": "set" },
+        "eventSheets.subfolders[].items[]": { "id": ["content"], "order": "set" },
+        "families.items[]": { "id": ["content"], "order": "set" },
+        "families.subfolders[]": { "id": ["name"], "order": "set" },
+        "families.subfolders[].items[]": { "id": ["content"], "order": "set" },
+        "timelines.items[]": { "id": ["content"], "order": "set" },
+        "timelines.subfolders[]": { "id": ["name"], "order": "set" },
+        "timelines.subfolders[].items[]": { "id": ["content"], "order": "set" },
+        "flowcharts.items[]": { "id": ["content"], "order": "set" },
+        "flowcharts.subfolders[]": { "id": ["name"], "order": "set" },
+        "flowcharts.subfolders[].items[]": { "id": ["content"], "order": "set" },
+        "models3d.items[]": { "id": ["content"], "order": "set" },
+        "models3d.subfolders[]": { "id": ["name"], "order": "set" },
+        "models3d.subfolders[].items[]": { "id": ["content"], "order": "set" },
+        "layouts.items[]": { "id": ["content"], "order": "ordered" },
+        "layouts.subfolders[]": { "id": ["name"], "order": "ordered" },
+        "layouts.subfolders[].items[]": { "id": ["content"], "order": "ordered" },
+        "**.items[]": { "id": ["sid", "name"], "order": "set" },
+        "**.subfolders[]": { "id": ["name"], "order": "set" },
+        "containers[]": { "id": ["content"], "order": "set" },
+        "containers[].members[]": { "id": ["content"], "order": "set" }
+      }
+    },
+    {
+      "kind": "eventSheet",
+      "match": "(^|/)eventSheets/.*\\.json$",
+      "rules": {
+        "events[]": { "id": ["sid", "includeSheet", "content"], "order": "ordered" },
+        "**.children[]": { "id": ["sid", "includeSheet", "content"], "order": "ordered" },
+        "**.conditions[]": { "id": ["sid", "content"], "order": "ordered" },
+        "**.actions[]": { "id": ["sid", "content"], "order": "ordered" },
+        "**.functionParameters[]": { "id": ["sid"], "order": "ordered" }
+      }
+    },
+    {
+      "kind": "layout",
+      "match": "(^|/)layouts/.*\\.json$",
+      "rules": {
+        "layers[]": { "id": ["sid"], "order": "ordered" },
+        "**.subLayers[]": { "id": ["sid"], "order": "ordered" },
+        "**.instances[]": { "id": ["uid"], "order": "ordered" },
+        "nonworld-instances[]": { "id": ["uid"], "order": "set" },
+        "**.effectTypes[]": { "id": ["name"], "order": "ordered" },
+        "**.sceneGraphData.children[]": { "id": ["uid"], "order": "ordered" },
+        "**.ownData.tilemapData": { "atomic": true },
+        "scene-graphs-folder-root.items[]": { "id": ["sid"], "order": "set" },
+        "scene-graphs-folder-root.subfolders[]": { "id": ["name"], "order": "set" },
+        "instanceFolderItemsJson[]": { "id": ["sid"], "order": "set" }
+      }
+    },
+    {
+      "kind": "objectType",
+      "match": "(^|/)(objectTypes|families)/.*\\.json$",
+      "rules": {
+        "members[]": { "id": ["content"], "order": "set" },
+        "instanceVariables[]": { "id": ["sid"], "order": "set" },
+        "behaviorTypes[]": { "id": ["sid"], "order": "ordered" },
+        "effectTypes[]": { "id": ["name"], "order": "ordered" },
+        "animations.items[]": { "id": ["sid"], "order": "ordered" },
+        "animations.subfolders[]": { "id": ["name"], "order": "ordered" },
+        "animations.subfolders[].items[]": { "id": ["sid"], "order": "ordered" },
+        "**.frames[]": { "id": ["imageSpriteId"], "order": "ordered" },
+        "**.imagePoints[]": { "id": ["name"], "order": "ordered" }
+      }
+    },
+    {
+      "kind": "timeline",
+      "match": "(^|/)timelines/.*\\.json$",
+      "rules": {}
+    },
+    {
+      "kind": "flowchart",
+      "match": "(^|/)flowcharts/.*\\.json$",
+      "rules": {
+        "nodes[]": { "id": ["sid"], "order": "set" },
+        "nodes[].outputs[]": { "id": ["sid"], "order": "ordered" }
+      }
+    }
+  ]
+}

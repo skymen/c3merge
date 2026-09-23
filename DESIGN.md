@@ -50,8 +50,14 @@ Generic keyed 3-way merge over JSON values, driven by a **profile** chosen from 
   C3 sorts them): set union, removals applied. Only if the survey shows the order really
   carries no meaning.
 - ordered lists (events, instances, layers): position is merged too. An element added on
-  one side goes after its predecessor. Both sides inserting at the same spot (including
-  both appending at the end), or moving the same element differently → conflict.
+  one side goes after its predecessor. **Ambiguous order is a warning, not a conflict**
+  (skymen, 2026-09-23): fixing order in JSON is miserable, fixing it in the editor is easy.
+  Both sides inserting at the same spot (including both appending) → ours first, then
+  theirs; the same element moved differently on both sides → ours' order. The file merges
+  cleanly and the warning names where to look ("Layout 1 › Layer 0: check the z-order of
+  Sprite#50, Sprite#60"). Exception: both sides *replaced* the same element (deleted it and
+  inserted something different in its place) → conflict, since keeping both changes the
+  logic, not just the order.
 - opaque values (tile data, mesh data): changed on both sides → conflict, never elementwise.
 - two surviving elements with the same identity or name → conflict.
 
@@ -61,7 +67,8 @@ C3-formatted JSON where only the conflicting members/elements are wrapped in
 current/incoming/both) works, and choosing either side gives valid JSON. The file doesn't
 open in C3 until resolved, on purpose. The driver exits 1 so git marks the path conflicted,
 and appends a readable summary (JSON path, what each side did) to
-`<repo>/.git/c3merge/conflicts.md` and stderr.
+`<repo>/.git/c3merge/conflicts.md` and stderr. Order warnings go to the same file and
+stderr, but don't make the merge fail.
 
 ## Profiles
 
