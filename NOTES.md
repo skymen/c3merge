@@ -14,7 +14,8 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [driver] Finish step when a merge ends: replay renames project-wide (files git merged without the driver still name the old type: `85c85d2a` MT2-2, Subhub-Trials1/2) and run `check`. Via hooks `c3merge init` installs per clone: pre-commit (merge finished by hand: staged fixes land in the merge commit), post-merge (clean merge: amend), post-rewrite (rebase). Tested on git 2.50; waiting on skymen (amend vs separate commit) ([tasks/git-driver.md](tasks/git-driver.md#finish-step))
+- [driver] Finish step when a merge ends, before anything is committed (skymen: open C3, commit when satisfied): replay renames in every file (git doesn't send one-sided files to the driver: `85c85d2a` MT2-2, Subhub-Trials1/2), leave the fixes uncommitted, run `check`. Hooks: `post-index-change` with `1` + `GITHEAD_*` for merges (clean or conflicted), `post-rewrite` for rebases; renames = sid kept, name changed between the common ancestor and the result ([tasks/git-driver.md](tasks/git-driver.md#finish-step))
+- [core] Instance variable renames (sid kept, name changed in the type/family file). Rewrite only structured references on the other side: instance keys, template flags, `instance-variable` parameters on that object. Never rewrite expressions (skymen 2026-09-23): C3 already renamed them on the renaming side, both sides editing one is a conflict, and the other side's new or edited expressions still naming `Type.old` are flagged as conflicts to fix by hand. Then behaviors and effects. 17 real renames in the Under The Red Sky history to test against ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#instance-variable-renames))
 - [docs] Artifact for skymen: every case where c3merge helps and exactly how it works (requested 2026-09-23)
 
 ## Normal

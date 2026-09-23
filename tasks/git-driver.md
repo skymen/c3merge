@@ -89,16 +89,18 @@ No global attributes file ever.
 
 ## Finish step
 **Status:** proposed (2026-09-23). A rename on one side must reach every file, but git only
-calls the driver for files both sides changed. What git runs when a merge ends (tested on
-git 2.50, no config-based hooks there, so hooks go in each clone's `.git/hooks`):
-- merge stopped on conflicts, finished with `git commit`: `pre-commit` runs, and files it
-  stages are part of the merge commit;
-- clean merge: `pre-merge-commit` runs after the commit's tree is built (staged fixes are
-  left out), then `post-merge`: the fix needs an amend of the merge commit;
-- rebase: only `post-commit` per pick and `post-rewrite` at the end; single cherry-pick:
-  only `post-commit`, which can't tell it's a cherry-pick.
-Plan: `c3merge init` installs hooks that call `c3merge finish` (appended to existing
-hooks, never replacing them). `finish` works out both sides (MERGE_HEAD/HEAD, or the merge
-commit's parents), rewrites leftover references to names renamed on either side (only
-names no type has in the merged project) in every C3 file, stages or amends, then runs
-`check`, which also settles "when to run check after a merge".
+calls the driver for files both sides changed. skymen: it must happen right after the
+merge, before any commit (they reopen C3 to check, then commit). Hooks on git 2.50
+(no config-based hooks, so they go in each clone's `.git/hooks`):
+- During `git merge`, clean or conflicted: `post-index-change` runs with `1` as first
+  argument right after the result is written to the working tree, with `GITHEAD_<theirs>`
+  in the environment (MERGE_HEAD isn't written yet). Other index writes (`status`, `add`)
+  have neither, so the hook exits at once. `post-merge` only runs after a clean merge.
+- Rebase: `post-index-change` per pick, `post-rewrite` once at the end.
+- Single cherry-pick: nothing identifies it.
+Plan: `c3merge init` appends a line to those hooks calling `c3merge finish`. `finish`
+compares object types (and later instance variables) between the common ancestor and the
+merged working tree: a sid whose name changed is a rename, and leftover references to the
+old name are rewritten in every C3 file (only if no type has that name now). Fixes are left
+uncommitted for review in C3. Then `check` runs. On a clean merge git commits before you
+look, so the fixes come on top of the merge commit (or merge with `--no-commit`).

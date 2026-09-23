@@ -135,3 +135,18 @@ from the layout being merged. What the driver can see (tested, git 2.50):
   instance moved to different places (x/y, originY: 3), an effect added on both with
   different parameters (1), a language list extended differently (1), layers/events
   deleted vs edited (5), an animation frame, a scene-graph folder item.
+
+### Instance variable renames
+**Status:** not handled (2026-09-23). Instances store values by variable name. Ours renames
+`myVar` → `speed` (C3 renames the key on every instance), theirs sets `myVar = 42` on one
+instance: conflict, taking ours loses the 42, taking theirs leaves an undeclared `myVar`
+that C3 refuses (lab row 14). Theirs adding a new instance with `myVar` merges cleanly and
+breaks the project. Fix: same as object type renames, from the variable's sid in the type or
+family file, but only for structured references (instance keys, template flags,
+`instance-variable` parameters with that `objectClass`). Expressions are never rewritten
+(skymen): C3 rewrote them on the renaming side, an expression edited on both sides is a
+conflict, and the other side's new or edited expressions still using `Type.old` (or
+`Self.old`, `Family.old`) are flagged as conflicts. Detection can err towards a false
+conflict; rewriting can't err safely. Test set: 17 variable renames in the Under The Red
+Sky history (e.g. `98622988` player: walkSpeed → groundSpeed), where C3's own rewrite is
+the reference.
