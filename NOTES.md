@@ -14,9 +14,8 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [corpus] Build the fixture corpus: tiny hand-made projects + one real base/ours/theirs triple per file kind ([tasks/test-corpus.md](tasks/test-corpus.md))
 - [profiles] Write the per-kind profile table from real files before writing the engine ([tasks/profiles.md](tasks/profiles.md))
-- [core] Generic keyed 3-way merge engine: identity matching, sid fallback, order-semantic lists, delete-vs-modify, collision log, exit codes ([tasks/core-merge-engine.md](tasks/core-merge-engine.md))
+- [core] Generic keyed 3-way merge engine: identity matching, order-semantic lists, anything uncertain is a conflict shown with localized markers, exit codes ([tasks/core-merge-engine.md](tasks/core-merge-engine.md))
 - [core] Output must be byte-identical to what C3 writes: `JSON.stringify(v, null, "\t")` (compact for uistate/brushes), no trailing newline, verified on 2,121 files ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#output-fidelity))
 - [driver] Git merge driver: `%O %A %B %P` protocol, `.gitattributes` template, `install` / `init` / `doctor` commands ([tasks/git-driver.md](tasks/git-driver.md))
 
@@ -25,13 +24,10 @@ packaging/release · `[docs]`
 - [check] Action/condition ids per addon (lab row 11): needs each addon's ACE list; maybe from the editor via c3cli, per release ([tasks/check-validator.md](tasks/check-validator.md))
 - [check] Post-merge hook: driver runs `check` on the whole project once all files are merged, not per file ([tasks/check-validator.md](tasks/check-validator.md#when-to-run))
 - [profiles] Order-semantic lists: events (execution order), layer instances (z-order), layers, animations frames — define insert-position rule and when a reorder is a real conflict ([tasks/profiles.md](tasks/profiles.md#ordering))
-- [core] Secondary matching when a sid exists on only one side (C3 regenerated it): match by name/type/objectClass+position before treating as delete+add ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#sid-fallback))
-- [driver] Conflict representation: JSON can't hold `<<<<<<<` markers. Best-effort merged file + collision log + exit 1 so git marks the path conflicted ([tasks/git-driver.md](tasks/git-driver.md#conflicts))
 - [driver] `merge=ours` fallback attribute for `*.uistate.json` (normally gitignored) ([tasks/git-driver.md](tasks/git-driver.md#attributes-template))
 - [action] Reusable workflow: `check` as a PR status + auto-resolve conflicts with the driver + "install c3merge" nudge comment ([tasks/github-action.md](tasks/github-action.md))
 - [gh] `gh extension install skymen/gh-c3merge`, `gh c3merge install|init|doctor|check` ([tasks/gh-extension.md](tasks/gh-extension.md))
 - [corpus] Golden tests: for every fixture triple, expected merged output + expected collision list; run in CI ([tasks/test-corpus.md](tasks/test-corpus.md#golden-tests))
-- [lab] Mine real history for merge triples: the Under The Red Sky `New-web-build` merge (`115db4b4`) has base/ours/theirs for hundreds of files — read-only extraction, never modify that repo ([tasks/test-corpus.md](tasks/test-corpus.md#real-triples))
 
 ## Later
 

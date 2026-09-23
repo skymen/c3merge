@@ -1,6 +1,26 @@
 # Fixture corpus and golden tests
 
-**Status:** not started (2026-09-21)
+**Status:** step 1 done (2026-09-23).
+- Hand-made: `test/cases.ts`, 39 cases on the real lab-base files (edits for ours/theirs,
+  expected result, or expected conflicts plus what taking ours/theirs must give). They
+  pin the engine rules down before the engine exists.
+- Real: `scripts/extract-triples.ts <repo> --name utrs` extracts every merge's
+  base/ours/theirs/actual for C3 files changed on both sides, read-only. Output in
+  `fixtures/real/` (gitignored: game content). UTRS: 103 merges, 972 files.
+
+## What git does on the UTRS history (2026-09-23)
+Of the 972 files changed on both sides, 36 were added on both sides (no base). Of the 936
+with a base, git's line merge conflicts on 96: layouts 62/521, c3proj 17/67, event sheets
+13/75, families 2/4, object types 2/269. Every clean git merge was valid JSON with no
+duplicate instance uids. Typical conflicts:
+- c3proj: both branches added object types/layouts at the end of the same folder `items`
+  list (the dominant case).
+- event sheets: both sides replaced the same condition, each with a new sid.
+- layouts: mass sid changes (e.g. 855 hunks in `mainHub.json` from `instanceFolderItem`
+  sids).
+Things the survey must know: `instanceFolderItem.sid` repeats its instance's sid;
+`sceneGraphData` and `scene-graphs-folder-root.items` hold uid/sid references, not
+identities.
 
 ## Hand-made fixtures
 `fixtures/<kind>/<case>/{base,ours,theirs,expected}.json` + `collisions.expected.json`.

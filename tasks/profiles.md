@@ -1,6 +1,11 @@
 # Per-file-kind profiles
 
 **Status:** not started (2026-09-21). First deliverable: the table below filled in from real
+
+**Superseded in part (2026-09-23):** no `policy` picks; opaque changed on both sides and
+same-spot inserts in ordered lists are conflicts (DESIGN.md "Engine"). Rewritten with the
+survey.
+
 files (UTRS + a fresh empty project per template), *before* engine code.
 
 ## Kind detection

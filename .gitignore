@@ -3,3 +3,4 @@ dist/
 lab/out/
 .env
 .env.*
+fixtures/real/

@@ -7,7 +7,7 @@ Status: pre-code, 2026-09-21. Decisions marked **(decided)** or **(recommendatio
 Three things sharing one core:
 
 1. **Merge driver** — git calls `c3merge merge-driver %O %A %B %P` for files matched by
-   `.gitattributes`. Structural 3-way merge, writes result over `%A`, exit 0 clean / 1 collisions.
+   `.gitattributes`. Structural 3-way merge, writes result over `%A`, exit 0 clean / 1 conflicts (marked in the file).
 2. **Validator** — `c3merge check <project-dir>`: cross-file invariants C3 does not repair.
    Runs post-merge (all files merged), in CI on every PR, and on demand.
 3. **Distribution/automation** — `gh` extension (install + commands), reusable GitHub Action
@@ -31,26 +31,37 @@ writes it (`--local` variant for people who refuse global config).
 
 ## Engine
 
+**(decided 2026-09-23, skymen) Only merge what is certainly right.** c3merge is not meant
+to resolve every merge. It handles the cases where git's line merge fails but the right
+answer is unambiguous (typically both sides adding things to the same list: new objects,
+files, addons, folder items). Anything it can't be 100% sure of is a **conflict for the
+user**, never a best-effort pick. Delete-vs-modify is a conflict (as in git).
+
 Generic keyed 3-way merge over JSON values, driven by a **profile** chosen from the file path
 (`%P`) with content sniffing as fallback:
 
-- objects: merge key by key; added-on-one-side keeps; deleted-on-one-side + unchanged-other
-  deletes; both-changed → recurse or collision.
+- objects: merge key by key; changed on one side → take it; same change on both → take it;
+  different changes → recurse if both are containers, else conflict. Deleted on one side and
+  changed on the other → conflict.
 - lists of objects: elements matched by an identity key from the profile
-  (`uid` > `sid` > `name` > `id` in the fallback profile), then merged element-wise.
-  Secondary matching for elements whose sid exists on one side only.
-- lists of scalars: ordered set union (family members, folder trees).
-- ordered-semantic lists (events, instances, layers): element identity as above, but the
-  *position* is merged too: other side's new elements go after their nearest surviving
-  predecessor; a move on one side + edit on the other is fine; a move on both sides to
-  different places is a collision.
-- opaque values (tile data, mesh data): pick a side, log a collision, never elementwise.
-- scalars changed differently: collision. Best-effort pick (profile may say `ours`, `theirs`,
-  `max`) so the file stays loadable, and exit 1 so git marks it.
+  (`uid` > `sid` > `name` > `id` in the fallback profile), then merged element-wise. No
+  fuzzy matching: an element whose key changed is a delete plus an add.
+- unordered lists (folder `items`, `usedAddons`, family members...: order means nothing or
+  C3 sorts them): set union, removals applied. Only if the survey shows the order really
+  carries no meaning.
+- ordered lists (events, instances, layers): position is merged too. An element added on
+  one side goes after its predecessor. Both sides inserting at the same spot (including
+  both appending at the end), or moving the same element differently → conflict.
+- opaque values (tile data, mesh data): changed on both sides → conflict, never elementwise.
+- two surviving elements with the same identity or name → conflict.
 
-Collision = `{path, kind, base, ours, theirs, chosen}`. Written to
-`<repo>/.git/c3merge/collisions.md` (appended per file, cleared on `c3merge clear`) and
-summarised on stderr, which git shows during the merge.
+**(decided 2026-09-23) Conflict representation: localized markers.** The merged file is
+C3-formatted JSON where only the conflicting members/elements are wrapped in
+`<<<<<<< ours` / `=======` / `>>>>>>> theirs` lines, so every git tool (VS Code accept
+current/incoming/both) works, and choosing either side gives valid JSON. The file doesn't
+open in C3 until resolved, on purpose. The driver exits 1 so git marks the path conflicted,
+and appends a readable summary (JSON path, what each side did) to
+`<repo>/.git/c3merge/conflicts.md` and stderr.
 
 ## Profiles
 

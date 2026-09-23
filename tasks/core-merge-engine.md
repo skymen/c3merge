@@ -2,6 +2,12 @@
 
 **Status:** not started (2026-09-21)
 
+**Superseded in part (2026-09-23):** no best-effort picks and no sid fallback. Anything
+uncertain (delete-vs-modify, opaque changed on both sides, same-spot inserts, moves on both
+sides) is a conflict shown with markers; see DESIGN.md "Engine". This doc gets rewritten
+with the engine.
+
+
 ## Inputs / outputs
 
 - Inputs: base, ours, theirs (parsed JSON), a profile, the repo-relative path.

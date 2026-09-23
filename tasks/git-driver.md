@@ -33,18 +33,17 @@ cheap), and `* text=auto eol=lf` so C3's `\n` output doesn't get CRLF-mangled on
 this alone removes a class of spurious whole-file diffs.
 
 ## Conflicts
-JSON can't carry conflict markers and still be a project C3 can open. Contract:
-1. Driver always writes a **loadable** best-effort merge to `%A`.
-2. Collisions appended to `.git/c3merge/collisions.md` with JSON path, kind, base/ours/theirs
-   excerpt, and which side was chosen. Summary line on stderr.
-3. Exit 1 when collisions exist → git leaves the path unmerged in the index. User reads the
-   log, optionally edits in C3 (the file loads!), then `git add`.
-4. Exit 0 otherwise.
-5. Parse failure on any side → run `git merge-file -p` semantics ourselves (text merge) and
-   forward its exit code, so behaviour equals git's default for broken files.
-
-`--prefer ours|theirs` env/config (`c3merge.prefer`) for scripted merges (the Action uses
-`theirs`? no — the Action resolves base→PR, so PR side is ours; it uses `ours`).
+**Decided 2026-09-23 (skymen):** anything c3merge can't be sure of is a conflict, shown
+with localized markers (see DESIGN.md "Engine"):
+1. Driver writes the merged file to `%A`: C3-formatted JSON, clean parts merged, each
+   conflicting member/element wrapped in `<<<<<<< ours` / `=======` / `>>>>>>> theirs`
+   lines. Picking either side (or both, for list elements) leaves valid JSON.
+2. A readable summary (file, JSON path in C3 terms, what each side did) is appended to
+   `.git/c3merge/conflicts.md` and printed to stderr.
+3. Exit 1 when there are conflicts → git leaves the path unmerged. Exit 0 otherwise.
+4. Parse failure on any side → git's own text merge (`git merge-file`), forwarding its
+   exit code, so broken files behave exactly as without c3merge.
+No `--prefer ours|theirs`: c3merge never picks a side for the user.
 
 ## rebase / cherry-pick / stash
 All go through the same ll-merge path, so the driver fires. Verify: the collision log path
