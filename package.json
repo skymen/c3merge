@@ -1,0 +1,20 @@
+{
+  "name": "c3merge",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --import tsx --test test/*.test.ts",
+    "lab": "tsx lab/run.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "c3cli": "file:../c3cli",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

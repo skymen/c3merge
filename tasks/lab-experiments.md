@@ -1,0 +1,86 @@
+# Lab: what does C3 tolerate?
+
+**Status:** 27 of 34 rows measured on r495-2 (stable) and r502 (beta), 2026-09-23. Harness
+in `lab/` (`npm run lab -- [--releases stable,beta] [--rows …]`), results in
+[reports/lab-matrix.md](../reports/lab-matrix.md), severities in
+[check-validator.md](check-validator.md). The 7 remaining rows need content in
+`fixtures/lab-base` (listed in the report); row 21 needs a real old project.
+
+## How the harness works (2026-09-23)
+- For each release: a control run (the untouched base), then every row in parallel on a
+  3-tab c3cli pool (about 75 s per release for 37 rows).
+- Each row: copy the base, apply one corruption (`lab/corruptions.ts`, edits keep C3's
+  exact JSON style so only the target field changes), open, preview, then **Save as
+  project folder**, and compare with the control's Save as.
+- Use Save as, not Ctrl+S: Ctrl+S only rewrites files C3 considers changed (on both
+  releases), so it can't show what C3 holds in memory. Save as writes every file.
+- Refusals show a generic dialog; the harness records the editor's console exception as
+  the cause.
+
+## What the lab corrected
+- "C3 regenerates missing/duplicate sids silently": **false**. Duplicate and missing
+  event sids, and duplicate uids, load fine and are written back unchanged.
+- "Missing object type for an instance: refuses": true, and nearly every other dangling
+  reference refuses too.
+- "C3 rewrites the whole file on save": only on Save as, or for files it considers changed.
+
+## Method
+1. Start from a tiny project (2 layouts, 2 event sheets, 3 object types, 1 family, 1
+   tilemap, 1 timeline) saved as a folder by the current C3 release.
+2. For each row, apply exactly one corruption with a script (reproducible, committed under
+   `fixtures/corruptions/`), zip to `.c3p`, open via c3cli.
+3. Record the outcome: `loads-clean` / `repairs-silently` (project opens, but re-saving
+   changes the file) / `repairs-with-notice` (dialog or log line) / `refuses` (error dialog)
+   / `crashes` (editor error / hang). Capture the dialog text and the editor log.
+4. Also test the *runtime*: preview the layout and check the console — some corruption
+   loads in the editor and dies in preview.
+5. Repeat on 2 releases (current stable + current beta) to learn what's stable.
+
+## Matrix (fill in)
+
+| # | Corruption | Editor | Preview | Notes |
+|---|---|---|---|---|
+| 1 | layout instance `type` → nonexistent object type | | | |
+| 2 | layout instance `uid` duplicated within layout | | | |
+| 3 | uid duplicated across layouts | | | |
+| 4 | event `sid` duplicated | | | |
+| 5 | event `sid` missing | | | |
+| 6 | object type `sid` duplicated | | | |
+| 7 | c3proj folder tree lists a layout with no file | | | |
+| 8 | layout file exists but not listed in c3proj | | | |
+| 9 | event sheet `include` → nonexistent sheet | | | |
+| 10 | event `objectClass` → nonexistent type | | | |
+| 11 | action `id` invalid for plugin | | | |
+| 12 | action parameter references missing layer name | | | |
+| 13 | call-function → nonexistent function | | | |
+| 14 | instance variable on instance not declared on type | | | |
+| 15 | type declares variable, instance lacks it | | | |
+| 16 | family member → nonexistent type | | | |
+| 17 | family members of mixed plugins | | | |
+| 18 | `usedAddons` missing an addon that a type uses | | | |
+| 19 | `usedAddons` bundled version differs from installed | | | |
+| 20 | `savedWithRelease` newer than editor | | | |
+| 21 | `savedWithRelease` much older | | | |
+| 22 | animation frame `imageSpriteId` duplicated | | | |
+| 23 | image file missing for a frame | | | |
+| 24 | layer `name` duplicated in a layout | | | |
+| 25 | object type name duplicated (two files) | | | |
+| 26 | key order changed / tabs→spaces / CRLF (does C3 rewrite on save? which parts?) | | | |
+| 27 | unknown extra key at top level / inside an event | | | |
+| 28 | required key missing (e.g. instance `world`) | | | |
+| 29 | `tileData` truncated | | | |
+| 30 | timeline references deleted instance uid | | | |
+| 31 | hierarchy child references missing uid | | | |
+| 32 | global variable name duplicated | | | |
+| 33 | event with 0 conditions + 0 actions (empty block) | | | |
+| 34 | two effects with same name on one type | | | |
+
+## What we already believe (unverified, from experience)
+- C3 regenerates missing/duplicate sids silently. Unknown whether references by sid (which
+  ones exist?) get updated.
+- C3 rewrites the whole file on save with its own formatting → output fidelity matters.
+- Missing object type for an instance: believed to refuse to load.
+
+## Deliverable
+Filled table → severity per invariant in `check-validator.md`, plus a list of "C3 repairs
+this, don't bother" to keep `check` quiet.

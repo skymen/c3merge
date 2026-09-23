@@ -1,0 +1,30 @@
+{
+	"name": "Event sheet 1",
+	"events": [
+		{
+			"eventType": "block",
+			"conditions": [
+				{
+					"id": "on-start-of-layout",
+					"objectClass": "System",
+					"sid": 970756382202115
+				}
+			],
+			"actions": [
+				{
+					"id": "set-quaternion",
+					"objectClass": "3DShape",
+					"sid": 715639464350228,
+					"parameters": {
+						"x-component": "0",
+						"y-component": "0",
+						"z-component": "0",
+						"w-component": "1"
+					}
+				}
+			],
+			"sid": 928488326739039
+		}
+	],
+	"sid": 430525130078027
+}

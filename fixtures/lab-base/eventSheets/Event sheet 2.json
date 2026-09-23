@@ -1,0 +1,111 @@
+{
+	"name": "Event sheet 2",
+	"events": [
+		{
+			"eventType": "include",
+			"includeSheet": "Event sheet 1"
+		},
+		{
+			"eventType": "script",
+			"language": "javascript",
+			"script": [
+				"console.log(\"hello\")",
+				"console.log(\"world\")"
+			]
+		},
+		{
+			"eventType": "block",
+			"conditions": [
+				{
+					"id": "on-start-of-layout",
+					"objectClass": "System",
+					"sid": 819472445735980
+				}
+			],
+			"actions": [
+				{
+					"type": "comment",
+					"text": "whatever"
+				}
+			],
+			"sid": 182958046825707
+		},
+		{
+			"functionName": "Function1",
+			"functionDescription": "",
+			"functionCategory": "",
+			"functionReturnType": "none",
+			"functionCopyPicked": false,
+			"functionIsAsync": false,
+			"functionParameters": [
+				{
+					"name": "test",
+					"type": "number",
+					"initialValue": "0",
+					"comment": "",
+					"sid": 903009954484553
+				}
+			],
+			"eventType": "function-block",
+			"conditions": [],
+			"actions": [],
+			"sid": 537084742720402
+		},
+		{
+			"eventType": "group",
+			"disabled": false,
+			"title": "Group1",
+			"description": "",
+			"isActiveOnStart": true,
+			"children": [
+				{
+					"aceType": "action",
+					"aceName": "Action1",
+					"objectClass": "Family1",
+					"functionDescription": "",
+					"functionCategory": "",
+					"functionReturnType": "none",
+					"functionCopyPicked": false,
+					"functionIsAsync": false,
+					"functionParameters": [
+						{
+							"name": "test",
+							"type": "string",
+							"initialValue": "",
+							"comment": "",
+							"sid": 590034579643004
+						}
+					],
+					"eventType": "custom-ace-block",
+					"conditions": [],
+					"actions": [
+						{
+							"type": "script",
+							"language": "javascript",
+							"script": [
+								"console.log(\"JS\")"
+							]
+						},
+						{
+							"type": "script",
+							"language": "typescript",
+							"script": [
+								"console.log(\"TS\")"
+							]
+						}
+					],
+					"sid": 305694598802316
+				},
+				{
+					"eventType": "script",
+					"language": "typescript",
+					"script": [
+						"console.log(\"TS\")"
+					]
+				}
+			],
+			"sid": 503019623611239
+		}
+	],
+	"sid": 674118131105405
+}
