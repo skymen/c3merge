@@ -14,7 +14,6 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [docs] Artifact for skymen: every case where c3merge helps and exactly how it works (requested 2026-09-23)
 
 ## Normal
 
