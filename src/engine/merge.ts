@@ -250,6 +250,7 @@ class Merger {
 
     const out = seq.map((id) => kept.get(id));
     this.checkDuplicateNames(out, [b, o, t], path, where);
+    this.checkDuplicateVariables(out, [b, o, t], path, where);
     return out;
   }
 
@@ -286,6 +287,25 @@ class Merger {
     if (anchor !== null && i === 0) return false; // anchor not in base
     for (; i < ib.length && !kept.has(ib[i]); i++) if (!O.has(ib[i]) && !T.has(ib[i])) return true;
     return false;
+  }
+
+  // Two event variables with the same name in one scope (the same event list; C3 names ignore
+  // case) where every version had unique ones: e.g. one side added `foo` next to `bar`
+  // while the other renamed `bar` to `foo`.
+  private checkDuplicateVariables(out: unknown[], versions: Json[][], path: string, where: string) {
+    const vars = (l: unknown[]) => l.filter((e): e is { [k: string]: Json } => isObj(e) && e.eventType === "variable" && typeof e.name === "string");
+    const unique = (l: unknown[]) => { const n = vars(l).map((v) => String(v.name).toLowerCase()); return new Set(n).size === n.length; };
+    if (!versions.every(unique) || unique(out)) return;
+    const seen = new Map<string, number>();
+    for (let i = 0; i < out.length; i++) {
+      const e = out[i];
+      if (!isObj(e) || e.eventType !== "variable" || typeof e.name !== "string") continue;
+      const key = e.name.toLowerCase(), j = seen.get(key);
+      if (j === undefined) { seen.set(key, i); continue; }
+      this.conflict(`${path}[variable ${e.name}]`, `${where}[variable ${e.name}]`,
+        `two variables named "${e.name}" in the same scope: one side added one while the other probably renamed a variable to that name; keep both and rename one in C3`);
+      out[i] = new Run([e], [], ["keep both, then rename one in C3", "drop this one"]);
+    }
   }
 
   // Two elements with the same name where every version had unique names: both sides

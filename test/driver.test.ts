@@ -166,6 +166,24 @@ test("finish step: after a clean merge, renames reach files the merge didn't, le
   } finally { r.cleanup(); }
 });
 
+test("finish step: new frames the other side added to a renamed object follow the rename", () => {
+  const r = repo();
+  try {
+    installHooks(r.dir, C3MERGE);
+    r.git("checkout", "-qb", "feature");
+    writeFileSync(r.file("images/sprite-animation 1-001.png"), "new frame");
+    r.commit("a frame");
+    r.git("checkout", "-q", "main");
+    renameType(r, "Sprite", "Hero");
+    r.git("mv", "game/images/sprite-animation 1-000.png", "game/images/hero-animation 1-000.png");
+    r.commit("rename Sprite to Hero");
+    const m = r.run("merge", "--no-edit", "feature");
+    assert.equal(m.status, 0, m.stderr);
+    assert.match(m.stderr, /renamed 1 image file/);
+    assert.ok(existsSync(r.file("images/hero-animation 1-001.png")) && !existsSync(r.file("images/sprite-animation 1-001.png")));
+  } finally { r.cleanup(); }
+});
+
 test("finish step: after a rebase, and after a merge that stops on a conflict", () => {
   for (const op of ["rebase", "conflict"]) {
     const r = repo();

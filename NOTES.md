@@ -14,7 +14,6 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [driver] Finish step: also rename image files. C3 names frame images after their type (`images/<type>-<animation>-<NNN>.png`); frames the other side added to a renamed type keep the old prefix and C3 can't find them (lab row 23) ([tasks/git-driver.md](tasks/git-driver.md#finish-step))
 - [docs] Artifact for skymen: every case where c3merge helps and exactly how it works (requested 2026-09-23)
 
 ## Normal

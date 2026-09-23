@@ -108,6 +108,10 @@ merge, before any commit, since they reopen C3 to check before committing).
   parents) and the object types on disk; applied to every event sheet, layout, family and
   the project file that isn't still conflicted (same rules as the engine; unsure
   expressions are listed, not touched). Rewritten files stay uncommitted. Then `check`.
+- Images: C3 names them after their object (`<type>-<animation>-<NNN>.<ext>`, `<type>.<ext>`,
+  lowercase). Git already follows an image the renaming side renamed, with the other side's
+  pixel edits (tested); frames the other side *added* keep the old prefix, so `finish`
+  renames them (never over an existing file; that case is reported).
 - On a clean merge git commits its own result first, so the fixes come on top of the merge
   commit, uncommitted.
 - Verified: `test/driver.test.ts` (clean merge, rebase, merge stopped on a conflict: a new

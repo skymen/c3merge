@@ -5,7 +5,7 @@
 // Renames = sids whose name changed between the common ancestor and the files on disk.
 // Fixes are left uncommitted, for review in C3; then `check` runs.
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { checkProject } from "./check/index.ts";
 import { readTypes, readTypesFromDisk } from "./context.ts";
@@ -19,6 +19,7 @@ export interface FinishReport {
   fixed: string[];                                    // files rewritten (uncommitted)
   unsure: { file: string; where: string; expr: string; reason: string }[];
   conflicted: string[];                               // not touched: still has conflict markers
+  images: string[];                                   // image files renamed after their type (uncommitted)
   check?: { errors: number; warnings: number };
 }
 
@@ -47,9 +48,10 @@ function finishProject(top: string, root: string, base: string): FinishReport {
   const dir = path.join(top, root);
   const set = resultRenameSet(readTypes(top, base, root), readTypesFromDisk(dir));
   const report: FinishReport = {
-    project: root, fixed: [], unsure: [], conflicted: [],
+    project: root, fixed: [], unsure: [], conflicted: [], images: [],
     renames: [...Object.entries(set.types).map(([a, b]) => `${a} → ${b}`), ...set.members.map((m) => `${[...m.owner][0]}.${m.old} → ${m.new}${m.kind === "behavior" ? " (behavior)" : ""}`)],
   };
+  if (report.renames.length) renameImages(dir, set.types, report);
   if (report.renames.length) {
     for (const rel of c3Files(dir)) {
       const file = path.join(dir, rel);
@@ -65,6 +67,27 @@ function finishProject(top: string, root: string, base: string): FinishReport {
     }
   }
   return report;
+}
+
+// C3 names images after their object type, lowercase: `<type>-<animation>-<NNN>.<ext>` for
+// frames, `<type>.<ext>` for single-image objects. Git follows images the renaming side
+// renamed (with the other side's pixel edits); new frames the other side added keep the
+// old prefix and C3 can't find them. Rename those (never over an existing file).
+function renameImages(dir: string, types: Record<string, string>, report: FinishReport) {
+  const images = path.join(dir, "images");
+  if (!existsSync(images)) return;
+  const renames = new Map(Object.entries(types).filter(([a, b]) => a.toLowerCase() !== b.toLowerCase()).map(([a, b]) => [a.toLowerCase(), b.toLowerCase()]));
+  for (const e of readdirSync(images, { recursive: true, withFileTypes: true })) {
+    if (!e.isFile()) continue;
+    const m = /^([^-.]+)([-.].*)$/.exec(e.name);
+    const to = m && renames.get(m[1].toLowerCase());
+    if (!to) continue;
+    const from = path.join(e.parentPath, e.name), target = path.join(e.parentPath, to + m![2]);
+    const rel = (f: string) => path.relative(dir, f).split(path.sep).join("/");
+    if (existsSync(target)) { report.unsure.push({ file: rel(from), where: "image", expr: rel(target), reason: "both the old and the new name exist" }); continue; }
+    renameSync(from, target);
+    report.images.push(`${rel(from)} → ${rel(target)}`);
+  }
 }
 
 // The C3 files renames can reach: the project file, event sheets, layouts, families.
@@ -95,6 +118,7 @@ export function describe(reports: FinishReport[]): string[] {
   for (const r of reports) {
     const where = r.project === "." ? "" : ` (${r.project})`;
     if (r.fixed.length) lines.push(`c3merge${where}: applied ${r.renames.join(", ")} to ${r.fixed.length} file(s) the merge didn't reach; not committed, check them in C3:`, ...r.fixed.map((f) => `  ${f}`));
+    if (r.images.length) lines.push(`c3merge${where}: renamed ${r.images.length} image file(s) after their object (new frames from the other side):`, ...r.images.map((f) => `  ${f}`));
     for (const u of r.unsure) lines.push(`c3merge${where}: not sure how to rename in ${u.file}, ${u.where}: ${u.expr} (${u.reason}); fix it in C3`);
     if (r.conflicted.length && r.renames.length) lines.push(`c3merge${where}: ${r.conflicted.length} conflicted file(s) not checked for renames yet: run \`c3merge finish\` again after resolving them`);
     if (r.check) lines.push(`c3merge${where}: check: ${r.check.errors} error(s), ${r.check.warnings} warning(s)${r.check.errors ? " (run `c3merge check` for details)" : ""}`);

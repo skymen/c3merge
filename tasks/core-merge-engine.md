@@ -150,7 +150,8 @@ with their variables and behaviors by sid; a sid with a new name is a rename.
   object and an event variable may share a name (`text.text & text`: the object, its
   variable, an event variable), but neither may take a system expression's name (`floor`),
   and an instance variable never shares a name with another value of its object. So: a name
-  followed by a dot is an object (or `Self`); a name on its own is an event variable;
+  followed by a dot is an object (or `Self`); a name on its own is an event variable or a
+  system expression (`pi`, `floor(...)`), never an object;
   `Obj.name(...)` is an expression of the object; `Obj.name.X` is a behavior. A rename that
   only changes case is applied to structured references (C3 does: `725e7a36`
   `Text_Button` → `Text_button`), not to expressions (they still resolve; C3 leaves them:
@@ -158,6 +159,9 @@ with their variables and behaviors by sid; a sid with a new name is a rename.
   unbalanced parentheses, `Self` outside an object's action. Uncertain expressions are left
   as they are and, after the merge, become a conflict: `<<<<<<< as merged` /
   `>>>>>>> renamed (check)`.
+- Two event variables with the same name in one scope after a merge (one side added `foo`
+  next to `bar`, the other renamed `bar` to `foo`; skymen): a conflict around the second one,
+  "keep both, then rename one in C3" / "drop this one".
 - Not renamed: a variable or type the other side re-created under the old name (a different
   sid), or one renamed differently on each side (the type's file conflicts).
 

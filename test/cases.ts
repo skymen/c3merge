@@ -342,6 +342,16 @@ export const CASES: Case[] = [
     merged: both(touchSheet, addAction({ id: "x", objectClass: "sprite", sid: 907, parameters: { value: "Sprite.X" } })),
   },
   {
+    // skymen: one side adds a local `foo` next to `bar`, the other renames `bar` to `foo`.
+    name: "two variables end up with the same name in one scope",
+    file: ES1,
+    ours: (v) => { v.events[0].name = "foo"; },
+    theirs: (v) => { v.events.splice(2, 0, { eventType: "variable", name: "Foo", type: "number", initialValue: "0", comment: "", isStatic: false, isConstant: false, sid: 908 }); },
+    conflicts: ["events[variable Foo]"],
+    takeOurs: (v) => { v.events[0].name = "foo"; v.events.splice(2, 0, { eventType: "variable", name: "Foo", type: "number", initialValue: "0", comment: "", isStatic: false, isConstant: false, sid: 908 }); },
+    takeTheirs: (v) => { v.events[0].name = "foo"; },
+  },
+  {
     name: "behavior renamed on one side, its properties edited on the other",
     file: L1, base: (v) => { inst(v, 2).behaviors = { Bullet: { properties: { speed: 1 } } }; },
     context: ctx([SPRITE_T], [SPRITE_RENAMED_BEH], [SPRITE_T]),

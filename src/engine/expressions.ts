@@ -71,8 +71,9 @@ export interface RenameResult { text: string; changed: boolean; uncertain: strin
 // event variable may share a name (`text.text & text`: object, its variable, event variable),
 // but neither may take a system expression's name (floor). An instance variable never shares
 // a name with another value of its object. So: a name followed by a dot is an object (or
-// Self), a name on its own is an event variable, `Obj.name(...)` is an expression of the
-// object (never a variable), `Obj.name.X` is a behavior.
+// Self); a name on its own is an event variable or a system expression (`pi`, `floor(...)`),
+// never an object; `Obj.name(...)` is an expression of the object (never a variable);
+// `Obj.name.X` is a behavior.
 export function renameExpression(expr: string, objectClass: string | undefined, set: RenameSet): RenameResult {
   const same = (reason: string | null): RenameResult => ({ text: expr, changed: false, uncertain: reason });
   // A rename that only changes case needs nothing here: the old spelling still resolves (and
