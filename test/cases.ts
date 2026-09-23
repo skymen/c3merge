@@ -76,9 +76,9 @@ const moveToLayer = (uid: number, sid: number): Edit => (v) => {
   const i = inst(v, uid); delInst(uid)(v); layer(v, sid).instances.push(i);
 };
 // Object types and families as the project context sees them (context.ts), per version.
-interface T { sid: number; name: string; family?: string[]; vars?: [number, string][]; behaviors?: [number, string][] }
+interface T { sid: number; name: string; plugin?: string; family?: string[]; vars?: [number, string][]; behaviors?: [number, string][] }
 const table = (...ts: T[]): Table => Object.fromEntries(ts.map((t) => [t.sid, {
-  kind: t.family ? "family" : "objectType", name: t.name, members: t.family ?? [], effects: [],
+  kind: t.family ? "family" : "objectType", name: t.name, plugin: t.plugin ?? (t.family ? "" : "Sprite"), members: t.family ?? [], effects: [],
   vars: (t.vars ?? []).map(([sid, name]) => ({ sid, name })), behaviors: (t.behaviors ?? []).map(([sid, name]) => ({ sid, name })),
 }]));
 const ctx = (base: T[], ours: T[], theirs: T[]): ProjectContext => ({ base: table(...base), ours: table(...ours), theirs: table(...theirs) });
@@ -333,6 +333,22 @@ export const CASES: Case[] = [
     file: ES1, context: ctx([SPRITE_T], [SPRITE_RENAMED_VAR], [with_(SPRITE_T, { vars: [[99, "myVar"], [12, "myVarToo"], [13, "myBool"]] })]),
     ours: touchSheet, theirs: addAction({ id: "x", objectClass: "Sprite", sid: 904, parameters: { value: "Sprite.myVar" } }),
     merged: both(touchSheet, addAction({ id: "x", objectClass: "Sprite", sid: 904, parameters: { value: "Sprite.myVar" } })),
+  },
+  {
+    // Sprite has a Z expression: `Sprite.z` could be either, so it's flagged, not renamed.
+    name: "variable named like an expression of its object, renamed: references flagged",
+    file: ES1, context: ctx([with_(SPRITE_T, { vars: [[14, "z"]] })], [with_(SPRITE_T, { vars: [[14, "zOffset"]] })], [with_(SPRITE_T, { vars: [[14, "z"]] })]),
+    ours: touchSheet, theirs: addAction({ id: "x", objectClass: "Sprite", sid: 906, parameters: { value: "Sprite.z + 1" } }),
+    conflicts: ["Sprite x (sid 906) parameter value"],
+    takeOurs: both(touchSheet, addAction({ id: "x", objectClass: "Sprite", sid: 906, parameters: { value: "Sprite.z + 1" } })),
+    takeTheirs: both(touchSheet, addAction({ id: "x", objectClass: "Sprite", sid: 906, parameters: { value: "Sprite.zOffset + 1" } })),
+  },
+  {
+    // C3 updates structured references (objectClass) but leaves expressions: they still resolve.
+    name: "a rename that only changes case: structured references follow, expressions stay",
+    file: ES1, context: ctx([SPRITE_T], [with_(SPRITE_T, { name: "sprite" })], [SPRITE_T]),
+    ours: touchSheet, theirs: addAction({ id: "x", objectClass: "Sprite", sid: 907, parameters: { value: "Sprite.X" } }),
+    merged: both(touchSheet, addAction({ id: "x", objectClass: "sprite", sid: 907, parameters: { value: "Sprite.X" } })),
   },
   {
     name: "behavior renamed on one side, its properties edited on the other",

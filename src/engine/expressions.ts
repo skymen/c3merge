@@ -58,21 +58,31 @@ export function tokenize(expr: string): Token[] | null {
 export const print = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 
 // One rename to apply. `owner` names the object type or family that has the variable or
-// behavior, in every form an expression may use for it (its name, the member types of a
+// behavior, in every form an expression may use for it (its names, the member types of a
 // family); `selfClasses` are the objectClass values for which `Self` means that owner.
-export interface MemberRename { kind: "var" | "behavior"; old: string; new: string; owner: Set<string>; selfClasses: Set<string> }
+// `ambiguous`: the old name is also something else of that object (an expression), so a
+// reference can't be told apart: any match is uncertain.
+export interface MemberRename { kind: "var" | "behavior"; old: string; new: string; owner: Set<string>; selfClasses: Set<string>; ambiguous?: string }
 export interface RenameSet { types: Record<string, string>; members: MemberRename[] }
 
 export interface RenameResult { text: string; changed: boolean; uncertain: string | null }
 
 // Rename references in one expression. `objectClass` is the object the action or condition
 // belongs to (what `Self` means), undefined when there is none (System, function calls).
+// C3 resolves object and variable names ignoring case, and picks what makes sense where a
+// name is shared: a name on its own is never an object, `Obj.name(...)` is never a variable,
+// `Obj.name.X` is a behavior.
 export function renameExpression(expr: string, objectClass: string | undefined, set: RenameSet): RenameResult {
   const same = (reason: string | null): RenameResult => ({ text: expr, changed: false, uncertain: reason });
-  const oldNames = new Set([...Object.keys(set.types), ...set.members.map((m) => m.old)]);
-  const lower = new Set([...oldNames].map((n) => n.toLowerCase()));
+  // A rename that only changes case needs nothing here: the old spelling still resolves (and
+  // C3 leaves such expressions as they are). Structured references do get it.
+  const types = new Map(Object.entries(set.types).filter(([a, b]) => a.toLowerCase() !== b.toLowerCase()).map(([a, b]) => [a.toLowerCase(), b]));
+  const lowerSet = (s: Set<string>) => new Set([...s].map((x) => x.toLowerCase()));
+  const members = set.members.filter((m) => m.old.toLowerCase() !== m.new.toLowerCase())
+    .map((m) => ({ ...m, oldL: m.old.toLowerCase(), ownerL: lowerSet(m.owner), selfL: lowerSet(m.selfClasses) }));
   // Cheap exit: none of the names occur at all (outside or inside strings).
-  if (![...lower].some((n) => expr.toLowerCase().includes(n))) return same(null);
+  const low = expr.toLowerCase();
+  if (![...types.keys(), ...members.map((m) => m.oldL)].some((n) => low.includes(n))) return same(null);
   const tokens = tokenize(expr);
   if (!tokens) return same("can't read the expression");
   const sig = tokens.map((t, i) => ({ t, i })).filter((x) => x.t.kind !== "space");
@@ -86,12 +96,11 @@ export function renameExpression(expr: string, objectClass: string | undefined, 
     }
     return -1;
   };
+  const cls = objectClass?.toLowerCase();
   const rewrite = new Map<number, string>(); // token index → new text
   for (let k = 0; k < sig.length; k++) {
     const tok = at(k)!;
-    if (tok.kind !== "name") continue;
-    // A name after a dot is a member, handled with its chain's head.
-    if (at(k - 1)?.text === ".") continue;
+    if (tok.kind !== "name" || at(k - 1)?.text === ".") continue; // members are handled with their chain's head
     // Chain: Head [ ( ... ) ] . m1 [ . m2 ]
     let next = k + 1;
     if (at(next)?.text === "(") {
@@ -99,34 +108,22 @@ export function renameExpression(expr: string, objectClass: string | undefined, 
       if (c < 0) return same("unbalanced parentheses");
       next = c + 1;
     }
-    const isChain = at(next)?.text === "." && at(next + 1)?.kind === "name";
-    const head = tok.text;
-    if (!isChain) {
-      // Variables and behaviors are always written after their object, so a bare name that
-      // spells one is something else (an event variable, a function). An object type's name
-      // on its own isn't something we can place.
-      if (Object.keys(set.types).some((n) => n.toLowerCase() === head.toLowerCase())) return same(`"${head}" is used on its own`);
-      continue;
-    }
-    const m1 = at(next + 1)!.text, afterM1 = at(next + 2)?.text;
-    if (head in set.types) rewrite.set(sig[k].i, set.types[head]);
-    else if (lower.has(head.toLowerCase()) && !(head in set.types) && Object.keys(set.types).some((n) => n.toLowerCase() === head.toLowerCase())) {
-      return same(`"${head}" differs from a renamed object only by case`);
-    }
-    // Members: which owners does the head stand for?
-    const renamedHead = set.types[head] ?? head;
-    for (const mr of set.members) {
-      if (m1.toLowerCase() !== mr.old.toLowerCase()) continue;
-      const isSelf = head === "Self";
-      if (isSelf && objectClass === undefined) return same(`"Self.${m1}" outside an object's action`);
-      const denotes = isSelf ? mr.selfClasses.has(objectClass!) : mr.owner.has(head) || mr.owner.has(renamedHead);
+    if (!(at(next)?.text === "." && at(next + 1)?.kind === "name")) continue; // a name on its own: never an object
+    const head = tok.text.toLowerCase();
+    const newHead = types.get(head);
+    if (newHead !== undefined) rewrite.set(sig[k].i, newHead);
+    const m1 = at(next + 1)!.text.toLowerCase(), afterM1 = at(next + 2)?.text;
+    for (const mr of members) {
+      if (m1 !== mr.oldL) continue;
+      let denotes: boolean;
+      if (head === "self") {
+        if (cls === undefined) return same(`"${tok.text}.${at(next + 1)!.text}" outside an object's action`);
+        denotes = mr.selfL.has(cls) || mr.selfL.has((types.get(cls) ?? cls).toLowerCase());
+      } else denotes = mr.ownerL.has(head) || (newHead !== undefined && mr.ownerL.has(newHead.toLowerCase()));
       if (!denotes) continue;
-      if (m1 !== mr.old) return same(`"${head}.${m1}" differs from "${mr.old}" only by case`);
-      // A variable is never followed by a dot (that's a behavior) or parameters.
-      if (mr.kind === "var") {
-        if (afterM1 === ".") continue; // Head.m1.X: m1 is a behavior with the variable's name
-        if (afterM1 === "(") return same(`"${head}.${m1}(" can't be a variable`);
-      } else if (afterM1 !== ".") continue; // a behavior is always followed by its expression
+      if (mr.kind === "var" && (afterM1 === "." || afterM1 === "(")) continue; // a behavior, or an expression call
+      if (mr.kind === "behavior" && afterM1 !== ".") continue; // a behavior is always followed by its expression
+      if (mr.ambiguous) return same(mr.ambiguous);
       rewrite.set(sig[next + 1].i, mr.new);
     }
   }

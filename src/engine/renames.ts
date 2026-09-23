@@ -9,6 +9,11 @@
 // that may still use a renamed-away name becomes a conflict (flagLeftovers).
 import { changes, type ProjectContext, type Table } from "../context.ts";
 import { renameExpression, tokenize, type MemberRename, type RenameSet } from "./expressions.ts";
+import EXPRESSIONS from "./expression-names.json" with { type: "json" };
+
+// Expression names an object answers to (built-in plugins; addons only get the common ones).
+const expressionsOf = (plugin: string) => new Set([...(EXPRESSIONS as Record<string, string[]>)._common, ...((EXPRESSIONS as Record<string, string[]>)[plugin.toLowerCase()] ?? [])]);
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 // Parameters holding a variable or timeline name, never an expression or an object.
 const NAMES_ONLY = new Set(["instance-variable", "variable", "timeline"]);
@@ -32,7 +37,7 @@ export function flagLeftovers(kind: string, merged: unknown, ctx: ProjectContext
     if (!params || typeof params !== "object") return;
     for (const key of Object.keys(params)) {
       const v = (params as any)[key];
-      if (typeof v !== "string" || NAMES_ONLY.has(key) || v in set.types) continue;
+      if (typeof v !== "string" || NAMES_ONLY.has(key) || Object.keys(set.types).some((n) => same(n, v))) continue;
       const r = renameExpression(v, ace.objectClass, set);
       if (r.changed) (params as any)[key] = r.text;
       else if (r.uncertain) onConflict(ace, key, guess(v, set), r.uncertain);
@@ -45,7 +50,7 @@ export function flagLeftovers(kind: string, merged: unknown, ctx: ProjectContext
 function renameSet(ctx: ProjectContext, renamer: "ours" | "theirs"): RenameSet {
   const B = ctx.base, R = ctx[renamer], O = ctx[renamer === "ours" ? "theirs" : "ours"];
   const chR = changes(B, R), chO = changes(B, O);
-  const sidNamed = (tbl: Table, name: string) => Object.entries(tbl).filter(([, x]) => x.name === name).map(([s]) => s);
+  const sidNamed = (tbl: Table, name: string) => Object.entries(tbl).filter(([, x]) => same(x.name, name)).map(([s]) => s);
   const types: Record<string, string> = {};
   for (const [old, now] of Object.entries(chR.types)) {
     const sid = sidNamed(B, old)[0];
@@ -70,10 +75,20 @@ function renameSet(ctx: ProjectContext, renamer: "ours" | "theirs"): RenameSet {
     for (const c of list) {
       const renamedSid = B[c.owner]?.[field].find((x) => x.name === c.old)?.sid;
       const other = O[c.owner]?.[field] ?? [];
-      if (other.some((x) => x.name === c.old && x.sid !== renamedSid)) continue; // a new one with the old name
+      if (other.some((x) => same(x.name, c.old) && x.sid !== renamedSid)) continue; // a new one with the old name
       if (other.some((x) => x.sid === renamedSid && x.name !== c.old && x.name !== c.new)) continue; // renamed differently
       const owner = names(c.owner);
-      members.push({ kind, old: c.old, new: c.new, owner, selfClasses: owner });
+      // A variable named like one of its object's expressions (`z`, `depth`): C3 decides which
+      // one `obj.z` means, we can't.
+      const plugins = new Set<string>();
+      for (const tbl of [B, R, O]) {
+        const x = tbl[c.owner];
+        if (!x) continue;
+        if (x.kind === "objectType") plugins.add(x.plugin);
+        else for (const m of x.members) for (const t of Object.values(tbl)) if (t.kind === "objectType" && same(t.name, m)) plugins.add(t.plugin);
+      }
+      const clash = kind === "var" && [...plugins].some((p) => expressionsOf(p).has(c.old.toLowerCase()));
+      members.push({ kind, old: c.old, new: c.new, owner, selfClasses: owner, ambiguous: clash ? `"${c.old}" is also the name of an expression of that object` : undefined });
     }
   }
   return { types, members };
@@ -85,9 +100,10 @@ const merge = (a: RenameSet, b: RenameSet): RenameSet => ({ types: { ...a.types,
 
 function apply(kind: string, v: unknown, set: RenameSet) {
   if (!v || typeof v !== "object" || (!Object.keys(set.types).length && !set.members.length)) return;
-  const type = (x: unknown) => (typeof x === "string" && x in set.types ? set.types[x] : x);
+  const typeKey = (x: string) => Object.keys(set.types).find((n) => same(n, x));
+  const type = (x: unknown) => { if (typeof x !== "string") return x; const k = typeKey(x); return k === undefined ? x : set.types[k]; };
   const vars = set.members.filter((m) => m.kind === "var"), behs = set.members.filter((m) => m.kind === "behavior");
-  const ownedBy = (m: MemberRename, cls: unknown) => typeof cls === "string" && (m.owner.has(cls) || m.owner.has(String(type(cls))));
+  const ownedBy = (m: MemberRename, cls: unknown) => typeof cls === "string" && [...m.owner].some((o) => same(o, cls) || same(o, String(type(cls))));
 
   if (kind === "layout") {
     forEachInstance(v, (i) => {
@@ -109,14 +125,14 @@ function apply(kind: string, v: unknown, set: RenameSet) {
         for (const key of Object.keys(params)) {
           const p = (params as any)[key];
           if (typeof p !== "string") continue;
-          if (key === "instance-variable") { for (const m of vars) if (p === m.old && ownedBy(m, cls)) (params as any)[key] = m.new; continue; }
+          if (key === "instance-variable") { for (const m of vars) if (same(p, m.old) && ownedBy(m, cls)) (params as any)[key] = m.new; continue; }
           if (NAMES_ONLY.has(key)) continue;
-          if (p in set.types) { (params as any)[key] = set.types[p]; continue; } // a parameter naming the object
+          if (typeKey(p) !== undefined) { (params as any)[key] = type(p); continue; } // a parameter naming the object
           const r = renameExpression(p, typeof cls === "string" ? cls : undefined, set);
           if (r.changed) (params as any)[key] = r.text; // sure: rewrite; unsure: leave, flagged after the merge
         }
       }
-      if (typeof ace.behaviorType === "string") for (const m of behs) if (ace.behaviorType === m.old && ownedBy(m, cls)) ace.behaviorType = m.new;
+      if (typeof ace.behaviorType === "string") for (const m of behs) if (same(ace.behaviorType, m.old) && ownedBy(m, cls)) ace.behaviorType = m.new;
       if (typeof cls === "string") ace.objectClass = type(cls);
     });
   } else if (kind === "objectType") {
@@ -171,11 +187,12 @@ function forEachAce(v: unknown, fn: (ace: any) => void) {
 function guess(expr: string, set: RenameSet): string {
   const tokens = tokenize(expr);
   if (!tokens) return expr;
-  const member = new Map(set.members.map((m) => [m.old, m.new]));
+  const member = new Map(set.members.map((m) => [m.old.toLowerCase(), m.new]));
+  const types = new Map(Object.entries(set.types).map(([a, b]) => [a.toLowerCase(), b]));
   return tokens.map((t, i) => {
     if (t.kind !== "name") return t.text;
     const afterDot = tokens.slice(0, i).filter((x) => x.kind !== "space").at(-1)?.text === ".";
-    return afterDot ? member.get(t.text) ?? t.text : set.types[t.text] ?? t.text;
+    return (afterDot ? member : types).get(t.text.toLowerCase()) ?? t.text;
   }).join("");
 }
 

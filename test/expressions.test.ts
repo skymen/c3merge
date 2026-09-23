@@ -49,6 +49,10 @@ test("renames: what is sure", () => {
     ["Enemy.X + Enemy(1).Y", undefined, "Foe.X + Foe(1).Y"],
     ['max(Sprite.myVar, 3) & "Sprite.myVar"', undefined, 'max(Sprite.speed, 3) & "Sprite.myVar"'],
     ["Sprite . myVar", undefined, "Sprite . speed"],
+    // C3 resolves object and variable names ignoring case
+    ["sprite.MYVAR", undefined, "sprite.speed"],
+    ["enemy.X", undefined, "Foe.X"],
+    ["SELF.myvar", "sprite", "SELF.speed"],
   ];
   for (const [expr, cls, expected] of cases) {
     const r = renamed(expr, cls);
@@ -65,6 +69,8 @@ test("renames: what must stay as is", () => {
     ["Sprite.Bullet", undefined],        // a variable named like the behavior? no: Bullet isn't myVar; and a behavior needs a dot after it
     ['"Enemy.X"', undefined],            // inside a string
     ["Family1.myVar", undefined],        // myVar is Sprite's own variable, not the family's
+    ["Enemy + 1", undefined],            // a name on its own is never an object (a variable named Enemy)
+    ["Sprite.myVar(1)", undefined],      // with parameters: an expression, never the variable
   ];
   for (const [expr, cls] of cases) {
     const r = renamed(expr, cls);
@@ -75,10 +81,6 @@ test("renames: what must stay as is", () => {
 test("renames: unsure → unchanged and uncertain", () => {
   const cases: [string, string | undefined][] = [
     ["Self.myVar", undefined],           // no object to know what Self is
-    ["Sprite.myvar", undefined],         // differs only by case
-    ["enemy.X", undefined],              // object differs only by case
-    ["Sprite.myVar(1)", undefined],      // a variable can't take parameters
-    ["Enemy + 1", undefined],            // an object's name on its own
     ["Sprite(0.myVar", undefined],       // unbalanced parentheses
     ['Sprite.myVar & "open', undefined], // unclosed string
     ["Sprite.myVar[0]", undefined],      // not C3 syntax
@@ -89,4 +91,14 @@ test("renames: unsure → unchanged and uncertain", () => {
     assert.equal(r.changed, false, expr);
     assert.ok(r.uncertain, `${expr} should be uncertain`);
   }
+});
+
+test("renames: a variable named like one of its object's expressions is never guessed", () => {
+  const set: RenameSet = { types: {}, members: [{ kind: "var", old: "z", new: "zOffset", owner: owner("Sprite"), selfClasses: owner("Sprite"), ambiguous: '"z" is also the name of an expression of that object' }] };
+  for (const expr of ["Sprite.z + 1", "Sprite.Z"]) {
+    const r = renameExpression(expr, undefined, set);
+    assert.deepEqual([r.text, r.changed], [expr, false], expr);
+    assert.ok(r.uncertain, expr);
+  }
+  assert.equal(renameExpression("Other.z", undefined, set).uncertain, null, "another object's z is not in question");
 });

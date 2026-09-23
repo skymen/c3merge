@@ -146,17 +146,24 @@ with their variables and behaviors by sid; a sid with a new name is a rename.
 - Expressions (`src/engine/expressions.ts`): an exact tokenizer (strings with `""`, numbers,
   names like `3DShape`, C3's operators) and a resolver for `Object.x`, `Object(i).x`,
   `Self.x` (from the action's `objectClass`), `Family.x` / `Member.x`, `Object.Behavior.x`.
-  It only rewrites when sure. Anything else is `uncertain`: unreadable expression,
-  unbalanced parentheses, `Self` outside an object's action, a name that differs only by
-  case (C3 matches names case-insensitively in expressions: `9afbe21d`), a variable followed
-  by `(`, an object's name on its own. Uncertain expressions are left as they are and, after
+  How C3 resolves names (skymen, 2026-09-24): object and variable names ignore case, and a
+  shared name means what makes sense where it is used. So: matches ignore case; a name on
+  its own is never an object; `Obj.name(...)` is never a variable; `Obj.name.X` is a
+  behavior. A rename that only changes case is applied to structured references (C3 does:
+  `725e7a36` `Text_Button` → `Text_button`) and not to expressions (they still resolve; C3
+  leaves them: `9afbe21d`). It only rewrites when sure; `uncertain` otherwise: unreadable
+  expression, unbalanced parentheses, `Self` outside an object's action, or a variable
+  named like an expression of its own object (`z`, `depth`: 6 of 741 real variables), where
+  only C3 knows which one `obj.z` means. Expression names per plugin come from C3's
+  language file (`scripts/expression-names.ts` → `src/engine/expression-names.json`, names
+  only; addons get the common ones). Uncertain expressions are left as they are and, after
   the merge, become a conflict: `<<<<<<< as merged` / `>>>>>>> renamed (check)`.
 - Not renamed: a variable or type the other side re-created under the old name (a different
   sid), or one renamed differently on each side (the type's file conflicts).
 
 **Verification (2026-09-23):**
 - `test/expressions.test.ts`: tokenizer and rename rules, including every "must not touch"
-  and "must decline" case; 9 engine cases in `test/cases.ts` (value edits, new instances,
+  and "must decline" case; 11 engine cases in `test/cases.ts` (value edits, new instances,
   new events, behaviors, family variables, an unsure `Self`, a re-created variable).
 - `scripts/expression-corpus.ts`: all 29,886 expression parameters of the 49 projects
   tokenize and print back byte for byte.
@@ -165,5 +172,7 @@ with their variables and behaviors by sid; a sid with a new name is a rename.
   fields renamed exactly as C3 did, 0 missed, 0 changed that C3 didn't**. 493 fields were
   also edited by hand in the same commits and can't be compared exactly; in those, every
   name the renamer produced is in C3's result except two that aren't errors (a condition
-  repointed by hand, `dcf3c86d`; `Secrets.UID` vs `secrets.UID`, same thing for C3).
+  repointed by hand, `dcf3c86d`; `Secrets.UID` vs `secrets.UID`, same thing for C3). In
+  real expressions, 1,128 instance variable references: none differs in case from the
+  declaration, none is followed by `(`.
 - Replay of the 103 real merges: 162 conflicts as before, no expression flagged.

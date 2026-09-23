@@ -27,7 +27,7 @@ packaging/release · `[docs]`
 
 ## Later
 
-- [core] Other renames C3 propagates: global/local event variables, functions, layers (in parameters), layouts, animations, effects
+- [core] Renames of event variables (global, local: scoped by the event tree) and functions (`callFunction`, `Functions.name(...)`), same system. Function signature changes (parameters added, removed, reordered: by sid) can't be applied to the other side's calls: flag its new or edited calls. Layers and animations are referenced by strings: nothing to do (skymen)
 
 - [profiles] Script events that store their code as one string (`"script": "…\n…"`) should get the line merge too; key timeline tracks by what they animate ([tasks/profiles.md](tasks/profiles.md#later))
 - [check] Repair mode: `check --fix` for the classes C3 does *not* repair itself (dedupe sids, drop dangling references with a report)

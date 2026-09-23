@@ -9,7 +9,7 @@ import path from "node:path";
 
 export interface Gained { vars: string[]; behaviors: string[]; effects: string[] }
 export interface Named { sid: number; name: string }
-export interface TypeInfo { kind: "objectType" | "family"; name: string; vars: Named[]; behaviors: Named[]; effects: string[]; members: string[] }
+export interface TypeInfo { kind: "objectType" | "family"; name: string; plugin: string; vars: Named[]; behaviors: Named[]; effects: string[]; members: string[] }
 // Object types and families by sid, at one commit.
 export type Table = Record<string, TypeInfo>;
 export interface ProjectContext { base: Table; ours: Table; theirs: Table }
@@ -47,7 +47,7 @@ export function readTypes(repo: string, rev: string, root: string): Table {
       const v = JSON.parse(body);
       if (typeof v.sid !== "number" || typeof v.name !== "string") continue;
       out[v.sid] = {
-        kind: `/${f}`.includes("/families/") ? "family" : "objectType", name: v.name,
+        kind: `/${f}`.includes("/families/") ? "family" : "objectType", name: v.name, plugin: typeof v["plugin-id"] === "string" ? v["plugin-id"] : "",
         vars: named(v.instanceVariables), behaviors: named(v.behaviorTypes),
         effects: Array.isArray(v.effectTypes) ? v.effectTypes.map((e: any) => e?.name).filter((n: unknown) => typeof n === "string") : [],
         members: Array.isArray(v.members) ? v.members : [],
