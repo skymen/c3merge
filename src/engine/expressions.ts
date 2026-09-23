@@ -60,18 +60,19 @@ export const print = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 // One rename to apply. `owner` names the object type or family that has the variable or
 // behavior, in every form an expression may use for it (its names, the member types of a
 // family); `selfClasses` are the objectClass values for which `Self` means that owner.
-// `ambiguous`: the old name is also something else of that object (an expression), so a
-// reference can't be told apart: any match is uncertain.
-export interface MemberRename { kind: "var" | "behavior"; old: string; new: string; owner: Set<string>; selfClasses: Set<string>; ambiguous?: string }
+export interface MemberRename { kind: "var" | "behavior"; old: string; new: string; owner: Set<string>; selfClasses: Set<string> }
 export interface RenameSet { types: Record<string, string>; members: MemberRename[] }
 
 export interface RenameResult { text: string; changed: boolean; uncertain: string | null }
 
 // Rename references in one expression. `objectClass` is the object the action or condition
 // belongs to (what `Self` means), undefined when there is none (System, function calls).
-// C3 resolves object and variable names ignoring case, and picks what makes sense where a
-// name is shared: a name on its own is never an object, `Obj.name(...)` is never a variable,
-// `Obj.name.X` is a behavior.
+// How C3 resolves names (skymen): object and variable names ignore case. An object and an
+// event variable may share a name (`text.text & text`: object, its variable, event variable),
+// but neither may take a system expression's name (floor). An instance variable never shares
+// a name with another value of its object. So: a name followed by a dot is an object (or
+// Self), a name on its own is an event variable, `Obj.name(...)` is an expression of the
+// object (never a variable), `Obj.name.X` is a behavior.
 export function renameExpression(expr: string, objectClass: string | undefined, set: RenameSet): RenameResult {
   const same = (reason: string | null): RenameResult => ({ text: expr, changed: false, uncertain: reason });
   // A rename that only changes case needs nothing here: the old spelling still resolves (and
@@ -123,7 +124,6 @@ export function renameExpression(expr: string, objectClass: string | undefined, 
       if (!denotes) continue;
       if (mr.kind === "var" && (afterM1 === "." || afterM1 === "(")) continue; // a behavior, or an expression call
       if (mr.kind === "behavior" && afterM1 !== ".") continue; // a behavior is always followed by its expression
-      if (mr.ambiguous) return same(mr.ambiguous);
       rewrite.set(sig[next + 1].i, mr.new);
     }
   }

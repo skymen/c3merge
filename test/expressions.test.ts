@@ -92,13 +92,3 @@ test("renames: unsure → unchanged and uncertain", () => {
     assert.ok(r.uncertain, `${expr} should be uncertain`);
   }
 });
-
-test("renames: a variable named like one of its object's expressions is never guessed", () => {
-  const set: RenameSet = { types: {}, members: [{ kind: "var", old: "z", new: "zOffset", owner: owner("Sprite"), selfClasses: owner("Sprite"), ambiguous: '"z" is also the name of an expression of that object' }] };
-  for (const expr of ["Sprite.z + 1", "Sprite.Z"]) {
-    const r = renameExpression(expr, undefined, set);
-    assert.deepEqual([r.text, r.changed], [expr, false], expr);
-    assert.ok(r.uncertain, expr);
-  }
-  assert.equal(renameExpression("Other.z", undefined, set).uncertain, null, "another object's z is not in question");
-});

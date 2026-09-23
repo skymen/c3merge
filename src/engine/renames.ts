@@ -9,10 +9,6 @@
 // that may still use a renamed-away name becomes a conflict (flagLeftovers).
 import { changes, type ProjectContext, type Table } from "../context.ts";
 import { renameExpression, tokenize, type MemberRename, type RenameSet } from "./expressions.ts";
-import EXPRESSIONS from "./expression-names.json" with { type: "json" };
-
-// Expression names an object answers to (built-in plugins; addons only get the common ones).
-const expressionsOf = (plugin: string) => new Set([...(EXPRESSIONS as Record<string, string[]>)._common, ...((EXPRESSIONS as Record<string, string[]>)[plugin.toLowerCase()] ?? [])]);
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 // Parameters holding a variable or timeline name, never an expression or an object.
@@ -78,17 +74,7 @@ function renameSet(ctx: ProjectContext, renamer: "ours" | "theirs"): RenameSet {
       if (other.some((x) => same(x.name, c.old) && x.sid !== renamedSid)) continue; // a new one with the old name
       if (other.some((x) => x.sid === renamedSid && x.name !== c.old && x.name !== c.new)) continue; // renamed differently
       const owner = names(c.owner);
-      // A variable named like one of its object's expressions (`z`, `depth`): C3 decides which
-      // one `obj.z` means, we can't.
-      const plugins = new Set<string>();
-      for (const tbl of [B, R, O]) {
-        const x = tbl[c.owner];
-        if (!x) continue;
-        if (x.kind === "objectType") plugins.add(x.plugin);
-        else for (const m of x.members) for (const t of Object.values(tbl)) if (t.kind === "objectType" && same(t.name, m)) plugins.add(t.plugin);
-      }
-      const clash = kind === "var" && [...plugins].some((p) => expressionsOf(p).has(c.old.toLowerCase()));
-      members.push({ kind, old: c.old, new: c.new, owner, selfClasses: owner, ambiguous: clash ? `"${c.old}" is also the name of an expression of that object` : undefined });
+      members.push({ kind, old: c.old, new: c.new, owner, selfClasses: owner });
     }
   }
   return { types, members };
