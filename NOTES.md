@@ -14,15 +14,14 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [core] Generic keyed 3-way merge engine: identity matching, order-semantic lists, anything uncertain is a conflict shown with localized markers, exit codes ([tasks/core-merge-engine.md](tasks/core-merge-engine.md))
-- [core] Output must be byte-identical to what C3 writes: `JSON.stringify(v, null, "\t")` (compact for uistate/brushes), no trailing newline, verified on 2,121 files ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#output-fidelity))
-- [driver] Git merge driver: `%O %A %B %P` protocol, `.gitattributes` template, `install` / `init` / `doctor` commands ([tasks/git-driver.md](tasks/git-driver.md))
+- [core] Match elements by uid *or* sid (exact keys): 150 "deleted vs changed" instances in `cad4249b` are the same instances with a renumbered uid on one side and new sids on the other ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#the-deleted-on-one-side-changed-on-the-other-instances-2026-09-23))
+- [core] Moves between lists of one file (instance moved to another layer, same uid): 61 conflicts today, and resolving them can duplicate the uid ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#the-deleted-on-one-side-changed-on-the-other-instances-2026-09-23))
+- [core] Project context in the driver (merge: GITHEAD_* env; rebase: rebase-merge/done): apply the other side's object type renames (same sid, new name) to references, and don't count C3's automatic changes (rename propagation, family variables filled in) as edits. Waiting on skymen ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#renames-need-the-whole-project))
 
 ## Normal
 
 - [check] Action/condition ids per addon (lab row 11): needs each addon's ACE list; maybe from the editor via c3cli, per release ([tasks/check-validator.md](tasks/check-validator.md))
-- [check] Post-merge hook: driver runs `check` on the whole project once all files are merged, not per file ([tasks/check-validator.md](tasks/check-validator.md#when-to-run))
-- [driver] `merge=ours` fallback attribute for `*.uistate.json` (normally gitignored) ([tasks/git-driver.md](tasks/git-driver.md#attributes-template))
+- [check] After a merge: the driver only reminds people to run `check` (it can't tell which file is last). Group "type X doesn't exist" findings (one per instance today) ([tasks/check-validator.md](tasks/check-validator.md#when-to-run))
 - [action] Reusable workflow: `check` as a PR status + auto-resolve conflicts with the driver + "install c3merge" nudge comment ([tasks/github-action.md](tasks/github-action.md))
 - [gh] `gh extension install skymen/gh-c3merge`, `gh c3merge install|init|doctor|check` ([tasks/gh-extension.md](tasks/gh-extension.md))
 - [corpus] Golden tests: for every fixture triple, expected merged output + expected collision list; run in CI ([tasks/test-corpus.md](tasks/test-corpus.md#golden-tests))
@@ -35,6 +34,7 @@ packaging/release · `[docs]`
 - [driver] Binary assets (PNG, audio) stay ordinary git conflicts — document, don't try to merge
 - [dist] npm package, Homebrew tap, gh extension binaries per OS, version scheme tracking C3 releases (`savedWithRelease`) ([tasks/dist.md](tasks/dist.md))
 - [action] GitLab CI equivalent (only if asked)
+- [driver] `c3merge resolve <file> --ours|--theirs`: take one side of every hunk in a file (`takeSide` exists)
 - [docs] README: install in 2 commands, what it does/doesn't merge, how to read the collision log
 
 ## Ideas

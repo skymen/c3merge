@@ -61,6 +61,10 @@ Generic keyed 3-way merge over JSON values, driven by a **profile** chosen from 
 - opaque values (tile data, mesh data): changed on both sides → conflict, never elementwise.
 - two surviving elements with the same identity or name → conflict.
 
+**(decided 2026-09-23, skymen)** Only C3's own files go through the structural merge.
+Files under `files/` and `scripts/` are left to git, except JSON, which gets git's merge when
+that's clean and valid, and a plain JSON merge otherwise.
+
 **(decided 2026-09-23) Conflict representation: localized markers.** The merged file is
 C3-formatted JSON where only the conflicting members/elements are wrapped in
 `<<<<<<< ours` / `=======` / `>>>>>>> theirs` lines, so every git tool (VS Code accept

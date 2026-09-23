@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // c3merge: structural merge and validation for Construct 3 projects.
+import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { checkProject, invariants, severityOf } from "./check/index.ts";
+import { doctor, init, install, mergeDriver } from "./driver.ts";
 
 const [command, ...rest] = process.argv.slice(2);
 
@@ -27,6 +29,30 @@ async function main(): Promise<number> {
     }
     return r.counts.error ? 1 : 0;
   }
+  if (command === "merge-driver") {
+    if (rest.length < 4) { console.error("usage: c3merge merge-driver %O %A %B %P  (called by git)"); return 2; }
+    return mergeDriver(rest[0], rest[1], rest[2], rest[3]);
+  }
+  if (command === "install") {
+    const { values } = parseArgs({ args: rest, options: { local: { type: "boolean" } } });
+    const changed = install({ local: values.local });
+    const where = values.local ? "this repository's .git/config" : "~/.gitconfig";
+    console.log(changed.length ? `${where}:\n${changed.map((c) => `  added ${c}`).join("\n")}` : `${where}: already set up`);
+    console.log("Each repository also needs the attributes: run `c3merge init` in it and commit .gitattributes.");
+    return 0;
+  }
+  if (command === "init") {
+    const root = execGitRoot();
+    if (!root) { console.error("c3merge init: not inside a git repository"); return 2; }
+    const r = init(root);
+    console.log(r === "unchanged" ? ".gitattributes already has the c3merge block" : `.gitattributes ${r}: commit it so everyone gets the same merges`);
+    return 0;
+  }
+  if (command === "doctor") {
+    const lines = doctor();
+    for (const l of lines) console.log(`${l.ok ? "ok " : "!! "} ${l.text}${l.fix ? `\n     fix: ${l.fix}` : ""}`);
+    return lines.every((l) => l.ok) ? 0 : 1;
+  }
   if (command === "invariants") {
     for (const inv of invariants) {
       const s = severityOf(inv);
@@ -34,8 +60,19 @@ async function main(): Promise<number> {
     }
     return 0;
   }
-  console.error("usage: c3merge check <project> [--json | --github] [--all]\n       c3merge invariants");
+  console.error([
+    "usage: c3merge install [--local]      set up the merge driver in git config (once per machine)",
+    "       c3merge init                   add the c3merge block to .gitattributes (once per repository)",
+    "       c3merge doctor                 check the setup",
+    "       c3merge check <project> [--json | --github] [--all]",
+    "       c3merge invariants",
+    "       c3merge merge-driver %O %A %B %P   (called by git)",
+  ].join("\n"));
   return 2;
+}
+
+function execGitRoot(): string | null {
+  try { return execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim(); } catch { return null; }
 }
 
 main().then((code) => { process.exitCode = code; }, (e) => { console.error(`c3merge: ${(e as Error).message}`); process.exitCode = 2; });

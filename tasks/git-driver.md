@@ -1,6 +1,33 @@
 # Git merge driver integration
 
-**Status:** not started (2026-09-21)
+**Status:** implemented (2026-09-23): `src/driver.ts`, commands `merge-driver`, `install
+[--local]`, `init`, `doctor`. Tests: `test/driver.test.ts` runs real `git merge`, `rebase` and
+`cherry-pick` in throwaway repos (driver installed `--local`). End to end:
+`scripts/replay-merge.ts <repo> <merge>` replays a real merge in a clone, with and without
+the driver, then runs `check` on both parents and the result; `scripts/fidelity.ts` merges
+two lab-base branches and has C3 open and re-save the result (opens cleanly on r495-2; the
+save differs only by C3's own r449 → r495 upgrade).
+
+## As built (2026-09-23)
+- JSON outside the C3 kinds (`files/`, `scripts/`, skymen): git's line merge first; kept
+  when clean and still valid JSON, otherwise the structural merge with default rules, in
+  the file's own style. Other files there (JS, images...) are never routed to c3merge.
+- A side that isn't valid JSON: git's own text merge (`git merge-file`), same as without
+  c3merge.
+- `.git/c3merge/conflicts.md` starts over for each operation (HEAD + MERGE_HEAD etc.), and
+  lists conflicts and order warnings with readable locations
+  (`layers[Layer 0].instances[Sprite#2].world.x`). The reminder to run `c3merge check` is
+  printed once per operation.
+- `install` writes an absolute command (node + script), since git GUIs often lack PATH.
+  Attributes patterns use `**/` so the project can live in a subfolder of the repo.
+- Real replays (Under The Red Sky): merges c3merge finishes cleanly introduced 0 new
+  `check` problems (a87cb1fc, c11d069e, 26e23f58, 10048c82, 76c5052b, 6c29f099; every
+  problem found was already on a parent). `85c85d2a` shows why `check` must run after a
+  merge: an object type renamed on one side (same sid), new instances with the old name on
+  the other.
+- In C3: `a87cb1fc` merged by c3merge opens on r449-5 exactly like its first parent (Under
+  The Red Sky is LTS-only: SDK v1 addons; on stable it stops at missing addons). Open from
+  a worktree, not a clone's root: c3cli stages the `.git` directory too (c3cli backlog).
 
 ## Protocol
 Git runs `driver` with `%O` base, `%A` ours (result written here), `%B` theirs, `%P` path,
