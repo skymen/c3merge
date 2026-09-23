@@ -10,6 +10,9 @@ export interface Corruption {
   // Content the base project must have for this row; checked before applying.
   needs?: (dir: string) => Promise<string | null>;
   apply(dir: string): Promise<void>;
+  // Is the corruption still there in a project C3 saved? The verdict rests on this, not on
+  // byte-comparing with what one release saves: C3 may repair differently (e.g. renumber).
+  present?: (dir: string) => Promise<boolean>;
 }
 
 type Json = any;
@@ -30,6 +33,9 @@ export async function readJson(dir: string, rel: string): Promise<Json> {
   return JSON.parse(await readFile(path.join(dir, rel), "utf8"));
 }
 
+// Reference copy for presence checks that compare with the original (e.g. key order).
+const BASE_FOR_PRESENCE = path.resolve(import.meta.dirname, "../fixtures/lab-base");
+
 const L1 = "layouts/Layout 1.json";
 const L2 = "layouts/Layout 2.json";
 const ES1 = "eventSheets/Event sheet 1.json";
@@ -47,6 +53,19 @@ const findEvent = (events: Json[], pred: (e: Json) => boolean): Json | undefined
 const firstAction = (sheet: Json) => findEvent(sheet.events, (e) => (e.actions ?? []).some((a: Json) => a.objectClass && a.id))!
   .actions.find((a: Json) => a.objectClass && a.id);
 
+const allInstances = async (d: string) => {
+  const p = await readJson(d, C3PROJ);
+  const out: Json[] = [];
+  for (const name of p.layouts.items) {
+    const l = await readJson(d, `layouts/${name}.json`).catch(() => null);
+    if (l) out.push(...l.layers.flatMap((x: Json) => x.instances));
+  }
+  return out;
+};
+const hasDup = (xs: unknown[]) => new Set(xs).size !== xs.length;
+const allEvents = (events: Json[]): Json[] => (events ?? []).flatMap((e) => [e, ...allEvents(e.children)]);
+const text = (d: string, rel: string) => readFile(path.join(d, rel), "utf8");
+
 // A "needs" check that looks for a JSON fragment anywhere in a file.
 const has = (rel: string, re: RegExp, what: string) => async (dir: string) =>
   re.test(await readFile(path.join(dir, rel), "utf8").catch(() => "")) ? null : what;
@@ -55,21 +74,26 @@ export const corruptions: Corruption[] = [
   { row: "1", title: "layout instance `type` → nonexistent object type",
     apply: (d) => editJson(d, L1, (l) => { inst(l, "Sprite").type = "NoSuchType"; }) },
   { row: "2", title: "layout instance `uid` duplicated within layout",
+    present: async (d) => hasDup((await readJson(d, L2)).layers.flatMap((l: Json) => l.instances).map((i: Json) => i.uid)),
     apply: (d) => editJson(d, L2, (l) => { inst(l, "3DShape").uid = inst(l, "Text").uid; }) },
   { row: "3", title: "uid duplicated across layouts",
+    present: async (d) => hasDup((await allInstances(d)).map((i) => i.uid)),
     apply: async (d) => { const uid = inst(await readJson(d, L1), "Sprite").uid; await editJson(d, L2, (l) => { inst(l, "Text").uid = uid; }); } },
   { row: "4", title: "event `sid` duplicated",
+    present: async (d) => hasDup(allEvents((await readJson(d, ES2)).events).map((e) => e.sid).filter((x) => x !== undefined)),
     apply: (d) => editJson(d, ES2, (s) => {
       const fn = findEvent(s.events, (e) => e.eventType === "function-block");
       findEvent(s.events, (e) => e.eventType === "block")!.sid = fn!.sid;
     }) },
   { row: "5", title: "event `sid` missing",
+    present: async (d) => allEvents((await readJson(d, ES2)).events).some((e) => e.eventType === "block" && e.sid === undefined),
     apply: (d) => editJson(d, ES2, (s) => { delete findEvent(s.events, (e) => e.eventType === "block")!.sid; }) },
   { row: "6", title: "object type `sid` duplicated",
     apply: async (d) => { const sid = (await readJson(d, "objectTypes/Sprite.json")).sid; await editJson(d, "objectTypes/Text.json", (t) => { t.sid = sid; }); } },
   { row: "7", title: "c3proj folder tree lists a layout with no file",
     apply: (d) => editJson(d, C3PROJ, (p) => { p.layouts.items.push("Layout 3"); }) },
   { row: "8", title: "layout file exists but not listed in c3proj",
+    present: async (d) => !(await readJson(d, C3PROJ)).layouts.items.includes("Layout 2"),
     apply: (d) => editJson(d, C3PROJ, (p) => { p.layouts.items = p.layouts.items.filter((n: string) => n !== "Layout 2"); }) },
   { row: "9", title: "event sheet `include` → nonexistent sheet",
     apply: (d) => editJson(d, ES2, (s) => { findEvent(s.events, (e) => e.eventType === "include")!.includeSheet = "No such sheet"; }) },
@@ -96,16 +120,18 @@ export const corruptions: Corruption[] = [
   { row: "17", title: "family members of mixed plugins",
     apply: (d) => editJson(d, "families/Family1.json", (f) => { f.members.push("Text"); }) },
   { row: "18", title: "`usedAddons` missing an addon that a type uses",
+    present: async (d) => !(await readJson(d, C3PROJ)).usedAddons.some((a: Json) => a.id === "Tilemap"),
     apply: (d) => editJson(d, C3PROJ, (p) => { p.usedAddons = p.usedAddons.filter((a: Json) => a.id !== "Tilemap"); }) },
   { row: "19", title: "`usedAddons` entry claims a different version / bundled",
+    present: async (d) => (await readJson(d, C3PROJ)).usedAddons.some((a: Json) => a.id === "Sprite" && (a.version === "0.0.1" || a.bundled)),
     apply: (d) => editJson(d, C3PROJ, (p) => { const a = p.usedAddons.find((x: Json) => x.id === "Sprite"); a.version = "0.0.1"; a.bundled = true; }) },
   { row: "20", title: "`savedWithRelease` newer than editor",
     apply: (d) => editJson(d, C3PROJ, (p) => { p.savedWithRelease = 99900; }) },
-  { row: "21", title: "`savedWithRelease` much older",
-    // Faking the number makes C3 expect the lowercase file names old releases used
-    // ("objectTypes\\sprite.json"), so it only tests the fake. Needs a real old project.
-    needs: async () => "a real project saved by an old release (faking savedWithRelease makes C3 look for old lowercase file names)",
-    apply: (d) => editJson(d, C3PROJ, (p) => { p.savedWithRelease = 30000; }) },
+  { row: "21", title: "`savedWithRelease` older: r449-5 (LTS)",
+    // r449 is the LTS release many users still run. (A much older number like r300 only
+    // tests a fake: C3 then expects the lowercase file names very old releases used.)
+    apply: (d) => editJson(d, C3PROJ, (p) => { p.savedWithRelease = 44905; }),
+    present: async (d) => (await readJson(d, C3PROJ)).savedWithRelease === 44905 },
   { row: "22", title: "animation frame `imageSpriteId` duplicated",
     apply: (d) => editJson(d, "objectTypes/3DShape.json", (t) => { const f = t.animations.items[0].frames; f[1].imageSpriteId = f[0].imageSpriteId; }) },
   { row: "23", title: "image file missing for a frame",
@@ -115,18 +141,24 @@ export const corruptions: Corruption[] = [
   { row: "25", title: "object type name duplicated (two files)",
     apply: (d) => editJson(d, "objectTypes/TiledBackground.json", (t) => { t.name = "Text"; }) },
   { row: "26a", title: "key order changed (Layout 1 top level reversed)",
+    present: async (d) => Object.keys(await readJson(d, L1))[0] !== Object.keys(await readJson(BASE_FOR_PRESENCE, L1))[0],
     apply: (d) => editJson(d, L1, (l) => Object.fromEntries(Object.entries(l).reverse())) },
   { row: "26b", title: "tabs → 2 spaces (Layout 1)",
+    present: async (d) => (await text(d, L1)).includes("\n  \""),
     apply: async (d) => { const f = path.join(d, L1); await writeFile(f, JSON.stringify(JSON.parse(await readFile(f, "utf8")), null, 2)); } },
   { row: "26c", title: "LF → CRLF (Layout 1)",
+    present: async (d) => (await text(d, L1)).includes("\r\n"),
     apply: async (d) => { const f = path.join(d, L1); await writeFile(f, (await readFile(f, "utf8")).replace(/\n/g, "\r\n")); } },
   { row: "27a", title: "unknown extra key at top level (Layout 1)",
+    present: async (d) => (await text(d, L1)).includes("c3mergeExtra"),
     apply: (d) => editJson(d, L1, (l) => { l.c3mergeExtra = { note: "unknown" }; }) },
   { row: "27b", title: "unknown extra key inside an event",
+    present: async (d) => (await text(d, ES2)).includes("c3mergeExtra"),
     apply: (d) => editJson(d, ES2, (s) => { findEvent(s.events, (e) => e.eventType === "block")!.c3mergeExtra = true; }) },
   { row: "28", title: "required key missing (instance `world`)",
     apply: (d) => editJson(d, L1, (l) => { delete inst(l, "Sprite").world; }) },
   { row: "29", title: "tilemap tile data truncated",
+    present: async (d) => { const t = inst(await readJson(d, L2), "Tilemap").ownData.tilemapData; const n = t.data.split(",").reduce((a: number, run: string) => a + (run.includes("x") ? Number(run.split("x")[0]) : 1), 0); return n !== t.width * t.height; },
     apply: (d) => editJson(d, L2, (l) => { const t = inst(l, "Tilemap").ownData.tilemapData; t.data = t.data.slice(0, Math.floor(t.data.length / 2)); }) },
   { row: "30", title: "timeline references deleted instance uid",
     needs: async (d) => (await readJson(d, "timelines/Timeline 1.json")).tracks.length ? null : "a timeline track animating an instance",
@@ -138,6 +170,7 @@ export const corruptions: Corruption[] = [
     needs: has(ES1, /"eventType":\s*"variable"/, "a global variable in Event sheet 1"),
     apply: (d) => editJson(d, ES1, (s) => { const v = s.events.find((e: Json) => e.eventType === "variable"); s.events.push({ ...v, sid: 222222222222222 }); }) },
   { row: "33", title: "event with 0 conditions + 0 actions (empty block)",
+    present: async (d) => allEvents((await readJson(d, ES1)).events).some((e) => e.eventType === "block" && !e.conditions?.length && !e.actions?.length),
     apply: (d) => editJson(d, ES1, (s) => { s.events.push({ eventType: "block", conditions: [], actions: [], sid: 333333333333333 }); }) },
   { row: "34", title: "two effects with same name on one type",
     needs: async (d) => (await readJson(d, "objectTypes/Sprite.json")).effectTypes.length ? null : "an effect on Sprite (e.g. Grayscale)",

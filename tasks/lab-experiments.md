@@ -16,10 +16,23 @@ in `lab/` (`npm run lab -- [--releases stable,beta] [--rows …]`), results in
   releases), so it can't show what C3 holds in memory. Save as writes every file.
 - Refusals show a generic dialog; the harness records the editor's console exception as
   the cause.
+- Each row has a `present(savedDir)` check ("are there duplicate uids?"), so the verdict
+  doesn't depend on what one release happens to write. Rows without one fall back to a
+  byte comparison with the control and are marked "(no presence check)".
+- Saving: a `.c3p` save rewrites every file; a folder save (Ctrl+S) only writes what C3
+  thinks changed (skymen, confirmed by rows 26–27 before the switch to Save as).
+
+## LTS (r449-5)
+The r449 editor refuses the current lab-base: `missing action id 'set-quaternion'` (a 3D
+shape action newer than r449). To add an LTS column, author lab-base in r449-5
+(`editor.construct.net/r449-5`). Newer releases open it too, so one base covers LTS,
+stable and beta.
 
 ## What the lab corrected
-- "C3 regenerates missing/duplicate sids silently": **false**. Duplicate and missing
-  event sids, and duplicate uids, load fine and are written back unchanged.
+- "C3 regenerates missing/duplicate sids silently": **half true**. Duplicate uids are
+  renumbered and a missing event sid is regenerated; a duplicate event sid is kept.
+  (The first run got uids wrong by byte-comparing with the control; each row now checks
+  its own corruption with a `present` function.)
 - "Missing object type for an instance: refuses": true, and nearly every other dangling
   reference refuses too.
 - "C3 rewrites the whole file on save": only on Save as, or for files it considers changed.
