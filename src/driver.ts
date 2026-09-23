@@ -3,6 +3,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { driverContext } from "./context.ts";
 import { mergeFile, ParseError, type Issue } from "./engine/merge.ts";
 import { profileFor } from "./profiles/index.ts";
 
@@ -26,7 +27,9 @@ export function mergeDriver(basePath: string, oursPath: string, theirsPath: stri
   }
   let result;
   try {
-    result = mergeFile(repoPath, base, ours, theirs);
+    // The whole project's changes on each side (renames, what types gained), when git says
+    // which commits are being merged (merge, rebase); otherwise this file alone.
+    result = mergeFile(repoPath, base, ours, theirs, driverContext(repoPath));
   } catch (e) {
     if (!(e instanceof ParseError)) throw e;
     // A side isn't valid JSON: behave exactly like git without c3merge.

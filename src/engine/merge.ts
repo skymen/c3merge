@@ -2,8 +2,11 @@
 // certainly right; everything else becomes a Conflict (a value) or a Run (a stretch of
 // list elements) that render.ts writes out between conflict markers. Ambiguous order is
 // merged anyway and reported as a warning.
+import type { ProjectContext, SideChanges } from "../context.ts";
 import { profileFor, ruleFor, type Profile, type Rule } from "../profiles/index.ts";
 import { mergeLines } from "./lines.ts";
+import { reconcileMoves, type ForcedConflict } from "./moves.ts";
+import { applyRenames } from "./renames.ts";
 import { detectStyle, render } from "./render.ts";
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
@@ -21,7 +24,9 @@ export interface MergeResult { text: string; conflicts: Issue[]; warnings: Issue
 
 export class ParseError extends Error {}
 
-export function mergeFile(repoPath: string, base: string | null, ours: string, theirs: string): MergeResult {
+// `context` (what changed across the project on each side, from context.ts) lets renames
+// reach this file and tells C3's automatic changes from edits; without it, per file only.
+export function mergeFile(repoPath: string, base: string | null, ours: string, theirs: string, context?: ProjectContext): MergeResult {
   const clean = (text: string): MergeResult => ({ text, conflicts: [], warnings: [] });
   if (ours === theirs || base === theirs) return clean(ours);
   if (base === ours) return clean(theirs);
@@ -30,19 +35,24 @@ export function mergeFile(repoPath: string, base: string | null, ours: string, t
     try { return JSON.parse(text); } catch (e) { throw new ParseError(`${side}: ${(e as Error).message}`); }
   };
   const b = parse("base", base), o = parse("ours", ours), t = parse("theirs", theirs);
-  const m = new Merger(profileFor(repoPath));
+  const [oAsIs, tAsIs] = [JSON.stringify(o), JSON.stringify(t)];
+  const profile = profileFor(repoPath);
+  if (context) applyRenames(profile.kind, b, o, t, context);
+  const forced = reconcileMoves(profile, b, o, t);
+  const m = new Merger(profile, context);
   const merged = m.merge(b, o, t, "", "", "");
+  m.applyForced(merged, forced);
   const result = { conflicts: m.conflicts, warnings: m.warnings };
   // Keep the exact bytes of a side when the merge is that side (formatting of non-C3 JSON).
   if (!m.conflicts.length) {
     const s = JSON.stringify(merged);
-    if (s === JSON.stringify(o)) return { text: ours, ...result };
-    if (s === JSON.stringify(t)) return { text: theirs, ...result };
+    if (s === oAsIs) return { text: ours, ...result };
+    if (s === tAsIs) return { text: theirs, ...result };
   }
   return { text: render(merged, detectStyle(ours)), ...result };
 }
 
-const isObj = (v: unknown): v is { [k: string]: Json } => v !== null && typeof v === "object" && !Array.isArray(v);
+export const isObj = (v: unknown): v is { [k: string]: Json } => v !== null && typeof v === "object" && !Array.isArray(v);
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
 // Deep equality where object key order doesn't matter (it doesn't for C3).
@@ -58,12 +68,29 @@ const canon = (v: Json): string =>
   isObj(v) ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canon(v[k])}`).join(",")}}`
   : Array.isArray(v) ? `[${v.map(canon).join(",")}]` : JSON.stringify(v);
 
-type ListRule = { id: string[]; order: "ordered" | "set" };
+type ListRule = { id: string[]; also?: string[]; order: "ordered" | "set" };
 
 class Merger {
   conflicts: Issue[] = [];
   warnings: Issue[] = [];
-  constructor(private profile: Profile) {}
+  constructor(private profile: Profile, private context?: ProjectContext) {}
+
+  // Moves that couldn't be settled (moves.ts): each side's copy becomes that side of a hunk.
+  applyForced(v: unknown, forced: Map<object, ForcedConflict>) {
+    if (!forced.size) return;
+    const walk = (x: unknown) => {
+      if (Array.isArray(x)) {
+        for (let i = 0; i < x.length; i++) {
+          const f = forced.get(x[i]);
+          if (f) {
+            x[i] = f.side === "ours" ? new Run([x[i]], []) : new Run([], [x[i]]);
+            if (!this.conflicts.some((c) => c.where === f.where)) this.conflict(f.where, f.where, f.message);
+          } else walk(x[i]);
+        }
+      } else if (isObj(x)) Object.values(x).forEach(walk);
+    };
+    walk(v);
+  }
 
   // `path` is for people (layers[sid=…].parallaxX); `pattern` for profile lookup (layers[].parallaxX).
   merge(b: Maybe, o: Maybe, t: Maybe, path: string, pattern: string, where: string): any {
@@ -129,6 +156,21 @@ class Merger {
     const [ib, io, it] = [ids(b), ids(o), ids(t)];
     // Elements we can't tell apart: merge the list as one value.
     for (const l of [ib, io, it]) if (l.some((x) => x === null) || new Set(l).size !== l.length) return null;
+    // An element whose id isn't in the base but whose alternate id (sid) is: the same element
+    // with a new id (uid renumbered), as long as that base element's id is gone on that side.
+    if (rule.also) {
+      const alt = new Map<string, string>();
+      b.forEach((e, i) => { const a = identity(e, rule.also!); if (a) alt.set(a, ib[i]!); });
+      const baseIds = new Set(ib);
+      for (const [l, ids] of [[o, io], [t, it]] as const) {
+        const present = new Set(ids);
+        l.forEach((e, i) => {
+          if (baseIds.has(ids[i])) return;
+          const a = identity(e, rule.also!), baseId = a ? alt.get(a) : undefined;
+          if (baseId && !present.has(baseId)) { ids[i] = baseId; present.add(baseId); }
+        });
+      }
+    }
     const B = new Map(ib.map((id, i) => [id!, b[i]])), O = new Map(io.map((id, i) => [id!, o[i]])), T = new Map(it.map((id, i) => [id!, t[i]]));
     const elPath = (id: string) => `${path}[${label(id)}]`;
     const elWhere = (id: string) => `${where}[${friendly(O.get(id) ?? T.get(id) ?? B.get(id)) ?? label(id)}]`;
@@ -143,7 +185,7 @@ class Merger {
       } else if (inO || inT) {
         const [mine, side] = inO ? [O.get(id)!, "ours"] : [T.get(id)!, "theirs"];
         if (!inB) kept.set(id, mine); // added on one side
-        else if (!eq(B.get(id)!, mine)) {
+        else if (!this.onlyAutomatic(B.get(id)!, mine, migrated(b, inO ? o : t), side === "ours" ? this.context?.ours : this.context?.theirs)) {
           this.conflict(elPath(id), elWhere(id), `deleted on ${side === "ours" ? "theirs" : "ours"}, changed on ${side}`);
           kept.set(id, inO ? new Run([mine], []) : new Run([], [mine]));
         } // else: deleted on the other side and untouched here → gone
@@ -199,6 +241,33 @@ class Merger {
     return out;
   }
 
+  // Changes C3 makes by itself are not edits, so a deletion on the other side wins over them
+  // (renames were already applied to the base by applyRenames):
+  // - keys every element of the list gained on that side and none had at base: a format
+  //   change from opening the project in a newer release (e.g. every instance gets a sid
+  //   and tags);
+  // - on an instance, what its object type (or a family) gained on that side: variables,
+  //   behaviors, effects, and the template flags for those variables.
+  private onlyAutomatic(base: Json, mine: Json, newKeys: string[], side: SideChanges | undefined): boolean {
+    if (eq(base, mine)) return true;
+    if (!isObj(base) || !isObj(mine)) return false;
+    const g = side && typeof mine.type === "string" && typeof mine.uid === "number" ? side.gained[mine.type] : undefined;
+    if (!newKeys.length && !g) return false;
+    const strip = (e: { [k: string]: Json }) => {
+      const c = structuredClone(e) as any;
+      for (const k of newKeys) delete c[k];
+      if (!g) return c;
+      for (const v of g.vars) if (c.instanceVariables) delete c.instanceVariables[v];
+      for (const x of g.behaviors) if (c.behaviors) delete c.behaviors[x];
+      for (const x of g.effects) if (c.effects) delete c.effects[x];
+      for (const comp of c.template?.components ?? []) for (const part of comp.component ?? []) {
+        if (Array.isArray(part.state)) part.state = part.state.filter((s: any) => !(isObj(s) && g.vars.includes(s.iv as string)));
+      }
+      return c;
+    };
+    return eq(strip(base), strip(mine));
+  }
+
   // Base elements in the gap after `anchor` that both sides deleted: both replaced them.
   private replacedOnBoth(anchor: string | null, ib: string[], kept: Map<string, unknown>, O: Map<string, Json>, T: Map<string, Json>) {
     let i = anchor === null ? 0 : ib.indexOf(anchor) + 1;
@@ -225,6 +294,13 @@ class Merger {
   }
 }
 
+// Keys every element of a side's list has and no element of the base list had.
+function migrated(base: Json[], side: Json[]): string[] {
+  if (!base.length || !side.length || !base.every(isObj) || !side.every(isObj)) return [];
+  const first = side[0] as { [k: string]: Json };
+  return Object.keys(first).filter((k) => side.every((e) => has(e as object, k)) && base.every((e) => !has(e as object, k)));
+}
+
 function defaultRule(b: Json[], o: Json[], t: Json[]): ListRule | undefined {
   const all = [...b, ...o, ...t];
   if (!all.every(isObj)) return undefined;
@@ -232,7 +308,7 @@ function defaultRule(b: Json[], o: Json[], t: Json[]): ListRule | undefined {
   return undefined;
 }
 
-function identity(e: Json, keys: string[]): string | null {
+export function identity(e: Json, keys: string[]): string | null {
   for (const k of keys) {
     if (k === "content") return `content:${canon(e)}`;
     if (k === "[0]") { if (Array.isArray(e) && e.length) return `0=${canon(e[0])}`; continue; }

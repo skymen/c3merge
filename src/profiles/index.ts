@@ -3,7 +3,7 @@
 import data from "./profiles.json" with { type: "json" };
 
 export type Rule =
-  | { id: string[]; order: "ordered" | "set" }
+  | { id: string[]; also?: string[]; moves?: boolean; order: "ordered" | "set" }
   | { atomic: true }
   | { scalar: "max" }
   | { lines: true };

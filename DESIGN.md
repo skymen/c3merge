@@ -61,6 +61,12 @@ Generic keyed 3-way merge over JSON values, driven by a **profile** chosen from 
 - opaque values (tile data, mesh data): changed on both sides → conflict, never elementwise.
 - two surviving elements with the same identity or name → conflict.
 
+**(decided 2026-09-23, skymen)** Renames and C3's automatic changes use the whole project
+(tasks/core-merge-engine.md "Project context"): the other side's object type renames are
+applied to references, and changes C3 makes by itself (variables a type gained, a release's
+new keys on every element) don't count as edits against a deletion. Float noise from the
+3D Object bug stays a conflict.
+
 **(decided 2026-09-23, skymen)** Only C3's own files go through the structural merge.
 Files under `files/` and `scripts/` are left to git, except JSON, which gets git's merge when
 that's clean and valid, and a plain JSON merge otherwise.

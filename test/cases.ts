@@ -9,6 +9,7 @@
 // Rule (DESIGN.md "Engine"): only merge what is certainly right, anything else is a conflict.
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { ProjectContext } from "../src/context.ts";
 
 export type Edit = (v: any) => void;
 export interface Case {
@@ -22,6 +23,7 @@ export interface Case {
   warnings?: string[]; // ambiguous order: merged anyway, reported (paths of the lists)
   takeOurs?: Edit;
   takeTheirs?: Edit;
+  context?: ProjectContext; // what changed across the project on each side (renames, gains)
 }
 
 const LAB = path.join(import.meta.dirname, "..", "fixtures", "lab-base");
@@ -65,6 +67,18 @@ const moveInst = (uid: number, to: number): Edit => (v) => {
   list.splice(to, 0, list.splice(i, 1)[0]);
 };
 const layerPath = (base: string) => { const v = JSON.parse(read(base)); return LAYER0(v); };
+// A second (and third) empty layer, for moves between layers.
+const addLayer = (name: string, sid: number): Edit => (v) => {
+  const l = clone(layer0(v)); Object.assign(l, { name, sid, instances: [] }); v.layers.push(l);
+};
+const layer = (v: any, sid: number) => v.layers.find((l: any) => l.sid === sid);
+const moveToLayer = (uid: number, sid: number): Edit => (v) => {
+  const i = inst(v, uid); delInst(uid)(v); layer(v, sid).instances.push(i);
+};
+const noChanges = { renames: {}, gained: {} };
+const ctx = (ours: Partial<ProjectContext["ours"]>, theirs: Partial<ProjectContext["theirs"]>): ProjectContext =>
+  ({ ours: { ...noChanges, ...ours }, theirs: { ...noChanges, ...theirs } });
+const renameSprite = (v: any) => { for (const l of v.layers) for (const i of l.instances) if (i.type === "Sprite") i.type = "Hero"; };
 const L1_LAYER = layerPath(L1);
 
 // Event sheet 1: variable, variable, block (on start of layout; 3 actions).
@@ -80,6 +94,11 @@ const BLOCK = `events[sid=928488326739039]`;
 
 const scriptAction = (script: string[]) => ({ type: "script", script, sid: 555 });
 const ivar = (name: string, sid: number) => ({ name, type: "number", initialValue: 0, desc: "", show: true, sid });
+// An action using an object in each way C3 references one.
+const usesSprite = (name: string) => ({
+  id: "set-x", objectClass: name, sid: 777,
+  parameters: { x: `${name}.X + 1`, text: '"Sprite.X"', object: name, "instance-variable": "Sprite" },
+});
 const addon = (id: string, version = "1.0.0.0") => ({ type: "plugin", id, name: id, author: "someone", bundled: true, version });
 
 export const CASES: Case[] = [
@@ -189,6 +208,76 @@ export const CASES: Case[] = [
     file: L1, ours: moveInst(7, 0), theirs: moveInst(2, 2),
     merged: moveInst(7, 0),
     warnings: [`${L1_LAYER}.instances`],
+  },
+
+  // ── ids that change, moves between layers ────────────────────────────────────────────
+  {
+    // Real merge cad4249b: one side renumbered uids, the other gave new sids.
+    name: "uid renumbered on one side, sid changed and edited on the other",
+    file: L1,
+    ours: (v) => { inst(v, 3).uid = 30; },
+    theirs: (v) => { inst(v, 3).sid = 999; inst(v, 3).world.x = 5; },
+    merged: (v) => { Object.assign(inst(v, 3), { uid: 30, sid: 999 }); inst(v, 30).world.x = 5; },
+  },
+  {
+    name: "moved to another layer on one side, edited on the other",
+    file: L1, base: addLayer("Layer 1", 111),
+    ours: (v) => { inst(v, 7).world.x = 1; },
+    theirs: moveToLayer(7, 111),
+    merged: both((v) => { inst(v, 7).world.x = 1; }, moveToLayer(7, 111)),
+  },
+  {
+    name: "moved to a different layer on each side",
+    file: L1, base: both(addLayer("Layer 1", 111), addLayer("Layer 2", 222)),
+    ours: moveToLayer(7, 111), theirs: moveToLayer(7, 222),
+    conflicts: [`${L1_LAYER}.instances[Sprite#7]`],
+    takeOurs: moveToLayer(7, 111), takeTheirs: moveToLayer(7, 222),
+  },
+  {
+    name: "deleted on one side, moved to another layer on the other",
+    file: L1, base: addLayer("Layer 1", 111),
+    ours: delInst(7), theirs: moveToLayer(7, 111),
+    conflicts: [`${L1_LAYER}.instances[Sprite#7]`],
+    takeOurs: delInst(7), takeTheirs: moveToLayer(7, 111),
+  },
+
+  // ── changes made across the project (context) ───────────────────────────────────────
+  {
+    // Real merge 85c85d2a: theirs renamed TiledShapeDark, ours added instances of it.
+    name: "object type renamed on one side, new instances of it on the other",
+    file: L1, context: ctx({}, { renames: { Sprite: "Hero" } }),
+    ours: addInst(50, "end"), theirs: renameSprite,
+    merged: both(renameSprite, addInst(50, "end"), (v) => { inst(v, 50).type = "Hero"; }),
+  },
+  {
+    name: "object type renamed on one side, new events using it on the other",
+    file: ES1, context: ctx({}, { renames: { Sprite: "Hero" } }),
+    ours: (v) => { block(v).actions.push(usesSprite("Sprite")); },
+    theirs: (v) => { block(v).actions[2].objectClass = "Hero"; },
+    merged: (v) => { block(v).actions[2].objectClass = "Hero"; block(v).actions.push(usesSprite("Hero")); },
+  },
+  {
+    // Real merges: C3 fills in a variable the type gained on one side; the other side
+    // deleted the instance. Only an automatic change: the deletion wins.
+    name: "deleted on one side, only given its type's new variable on the other",
+    file: L1, context: ctx({}, { gained: { TiledBackground: { vars: ["hp"], behaviors: [], effects: [] } } }),
+    ours: delInst(3), theirs: (v) => { inst(v, 3).instanceVariables = { hp: 0 }; },
+    merged: delInst(3),
+  },
+  {
+    // Real merge cad4249b: opening the project in a newer release gave every instance a
+    // sid and tags on one side; the other side deleted some of them.
+    name: "deleted on one side, only migrated by a newer release on the other",
+    file: L1, base: (v) => { for (const i of layer0(v).instances) delete i.tags; },
+    ours: delInst(3), theirs: (v) => { for (const i of layer0(v).instances) i.tags = ""; },
+    merged: both(delInst(3), (v) => { for (const i of layer0(v).instances) i.tags = ""; }),
+  },
+  {
+    name: "deleted on one side, new variable and a real edit on the other",
+    file: L1, context: ctx({}, { gained: { TiledBackground: { vars: ["hp"], behaviors: [], effects: [] } } }),
+    ours: delInst(3), theirs: (v) => { inst(v, 3).instanceVariables = { hp: 0 }; inst(v, 3).world.x = 1; },
+    conflicts: [`${L1_LAYER}.instances[uid=3]`],
+    takeOurs: delInst(3), takeTheirs: (v) => { inst(v, 3).instanceVariables = { hp: 0 }; inst(v, 3).world.x = 1; },
   },
 
   // ── event sheets (execution order) ──────────────────────────────────────────────────

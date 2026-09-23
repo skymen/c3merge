@@ -1,13 +1,16 @@
 // Replay real merges (from scripts/extract-triples.ts) through the engine and compare with
 // git's line merge and with what people committed.
-//   tsx scripts/replay-triples.ts [fixtures/real/utrs] [--show <outcome>] [--diff]
+//   tsx scripts/replay-triples.ts [fixtures/real/utrs] [--repo <repo> [--root .]] [--show <outcome>]
+// With --repo, each merge also gets the project context (renames, what types gained) that
+// the driver builds from git.
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { mergeFile, eq } from "../src/engine/merge.ts";
+import { buildContext, type ProjectContext } from "../src/context.ts";
 
-const { positionals, values } = parseArgs({ allowPositionals: true, options: { show: { type: "string" } } });
+const { positionals, values } = parseArgs({ allowPositionals: true, options: { show: { type: "string" }, repo: { type: "string" }, root: { type: "string", default: "." } } });
 const root = positionals[0] ?? "fixtures/real/utrs";
 const manifest = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8"));
 const read = (d: string, k: string) => (existsSync(path.join(d, `${k}.json`)) ? readFileSync(path.join(d, `${k}.json`), "utf8") : null);
@@ -16,14 +19,16 @@ const parse = (s: string | null) => { try { return s === null ? undefined : JSON
 const outcomes = new Map<string, string[]>();
 const add = (k: string, v: string) => outcomes.set(k, [...(outcomes.get(k) ?? []), v]);
 let warnings = 0, ms = 0;
-for (const m of manifest) for (const f of m.files) {
+for (const m of manifest) {
+  const context: ProjectContext | undefined = values.repo ? buildContext(values.repo, values.root!, { base: m.base, ours: m.ours, theirs: m.theirs }) : undefined;
+  for (const f of m.files) {
   const d = path.join(root, m.merge, f.path);
   const [base, ours, theirs, actual] = ["base", "ours", "theirs", "actual"].map((k) => read(d, k));
   if (ours === null || theirs === null) continue; // deleted on one side: git handles it without the driver
   const tag = `${m.merge} ${f.path}`;
   const t0 = performance.now();
   let r;
-  try { r = mergeFile(f.path, base, ours, theirs); } catch (e) { add("engine error", `${tag}: ${(e as Error).message}`); continue; }
+  try { r = mergeFile(f.path, base, ours, theirs, context); } catch (e) { add("engine error", `${tag}: ${(e as Error).message}`); continue; }
   ms += performance.now() - t0;
   warnings += r.warnings.length;
   const git = f.gitConflicts === null ? "added on both" : f.gitConflicts ? "git conflict" : "git clean";
@@ -39,6 +44,7 @@ for (const m of manifest) for (const f of m.files) {
     vsGit = eq(merged, parse(g)) ? ", same as git" : ", differs from git";
   }
   add(`${git} → c3merge clean${vsGit}, ${vsActual}`, `${tag}${r.warnings.length ? ` [${r.warnings.length} order warning(s)]` : ""}`);
+}
 }
 
 console.log(`engine time: ${Math.round(ms)} ms total, ${warnings} order warnings\n`);

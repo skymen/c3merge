@@ -25,6 +25,30 @@ Ambiguous order is merged (ours first) and reported as a warning.
 - Two elements with the same `name` after the merge, where every version had unique names
   → conflict.
 - `savedWithRelease`: the larger one.
+- `also` (instances: `sid`): an element whose primary id (uid) changed on one side is still
+  matched through the second exact key, when the base element's uid is gone on that side.
+- `moves` (instances): a move to another layer on one side is replayed on the base and the
+  other side before merging (`moves.ts`), so both sides' changes merge in the new place.
+  Moved to different layers on each side, or moved on one side and deleted on the other:
+  a conflict around each copy, so taking either side leaves exactly one.
+
+## Project context (`src/context.ts`, skymen 2026-09-23)
+The driver reads object types and families at base, ours and theirs from git (`git merge`:
+`GITHEAD_<sha>`; rebase: `.git/rebase-merge/done`; a single cherry-pick gets none) and
+passes the engine each side's changes:
+- **Renames** (same sid, new name): applied to the base and the other side before merging
+  (`renames.ts`): instance `type`, event `objectClass`, parameters naming the object (all
+  but variable and timeline parameters, which can hold an equal name), `Name.` in
+  expressions outside strings, family members, project folders and containers.
+- **C3's automatic changes don't count as edits** when the other side deleted the
+  instance: what its type or a family gained on that side (variables, behaviors, effects,
+  template flags for those variables), and keys every element of the list gained on that
+  side while none had them at base (opening in a newer release gives every instance a
+  `sid` and `tags`).
+Limit: git only calls the driver for files both sides changed. A file only one side
+changed is taken as is, even if it names a type the other side renamed (`85c85d2a`:
+MT2-2, Subhub-Trials1, Subhub-Trials2, fixed by hand in "merge fix" `46e44c7f`). Needs a
+step after the merge (backlog).
 
 ## Output
 - Clean: `JSON.stringify(v, null, indent)` in the style of ours' file (C3: tabs, `\n`, no
@@ -53,19 +77,26 @@ one side (git settles modify/delete itself, the driver isn't called), 2 added on
 - Still conflicting: 58 + 4 + 2 files.
 
 ### The "deleted on one side, changed on the other" instances (2026-09-23)
-Where the instance went on the deleting side:
-- **Same sid, new uid: 150** (all `cad4249b`): not deleted. One side renumbered uids, the
-  other changed sids. Matching an element by uid *or* sid (both exact keys) pairs them.
-- **Moved to another layer, same uid: 61**: a move, not a deletion. Today it's a conflict,
-  and resolving it can leave the uid twice. Needs move detection across lists of a file.
-- **Same content, new uid and sid: 15** (cut/paste): only a content match finds them, so
-  they stay conflicts.
-- **Really deleted: 239**, and the other side's change is usually automatic:
+414 conflicts before project context. Where the instance went on the deleting side:
+- **Moved to another layer, same uid: 61** → move detection.
+- **Re-created (same content, new uid and sid): 15**: nothing exact links them, still
+  conflicts (or the deletion wins when the other side's change was automatic).
+- **Really deleted: the rest**, where the other side's change was mostly C3's own:
+  - 150 in `cad4249b`: theirs opened the project in a newer release ("update to beta"),
+    which gave every instance a `sid` and `tags`; ours redesigned levels (4-1: 422 → 380
+    instances). An earlier count called these "same sid, new uid": wrong, the base had no
+    sids at all and `undefined === undefined` matched.
   - 44: the object type was **renamed** on that side (`TiledShapeDark` → `woodPlanksShape`,
     same sid `875094639770084`, `6c2397cc`), and C3 updated the instances' `type`.
   - ~150: variables a **family** gained on that side (e.g. `scatterShape` +`animationType`),
     added by C3 to every member instance, values from the instances' template.
-  - the rest (~45) are real edits (`world`, `showing`/`locked`, properties).
+  - ~45: real edits (`world`, `showing`/`locked`, properties): real conflicts.
+
+With uid-or-sid matching, moves and project context: **506 conflicts → 162**, and files
+git conflicts on that c3merge resolves: 28 → 41 of 86 (`replay-triples.ts --repo`). What's
+left: the real edits above, the 3D Object float bug (78, conflicts on purpose: skymen),
+addon versions (7), 8 instances moved to different layers on each side (`0e9870e1`
+Tower), same file/type created on both sides (4), replaced events (8).
 
 ### Renames need the whole project
 The rename in `85c85d2a`: theirs renamed `TiledShapeDark`, ours added 49 new instances with

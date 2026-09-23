@@ -44,13 +44,19 @@ rules. `*.uistate.json` never reaches the engine (`merge=ours` in `.gitattribute
 - 3D mesh points, colours, vectors, script lines, call-function parameters, template
   components state, timeline tracks and keyframes: no identity → one value each.
 
+## Second keys and moves (2026-09-23)
+- `also`: instances also match by `sid` when a side renumbered the uid.
+- `moves`: instances can move between layer lists of one layout; the engine replays a
+  move made on one side before merging (tasks/core-merge-engine.md).
+
 ## Duplicates after a merge
 Two elements that end up with the same identity, or the same `name` in a list where names
 were unique in all three versions, are a conflict (two branches both created an instance
 variable `hp`, a layer `Background`...). C3 refuses most of these (lab rows 24, 25, 32).
 
 ## Later
-- Script lines (`script[]`): a line-level 3-way merge like git's, instead of one value.
+- Script lines: `script[]` arrays get the line-by-line merge (done); script events that
+  store their code as one string (`"script": "…\n…"`) should get it too.
 - Timelines: key tracks by the instance/property they animate, once real timeline merges
   show up.
 - Profiles for new kinds (scene graphs, 3D models) as they appear in the survey.

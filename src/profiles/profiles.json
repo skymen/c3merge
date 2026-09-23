@@ -8,6 +8,8 @@
     "'set' (order means nothing: C3 sorts it or only uses it for display).",
     "`lines` = a list of text lines, merged line by line like git (overlapping edits → conflict).",
     "`atomic` = merge as one value (changed on both sides → conflict). `scalar: 'max'` = take the larger number.",
+    "`also` = a second exact key: an element whose id changed on one side (uid renumbered) is still matched by it.",
+    "`moves` = elements can move between lists of this kind in one file (instances between layers).",
     "Lists not listed here: objects that all have a uid (or else all a sid) → matched by it, ordered;",
     "anything else → atomic. Lists whose identities aren't unique in some version → atomic."
   ],
@@ -63,8 +65,8 @@
       "rules": {
         "layers[]": { "id": ["sid"], "order": "ordered" },
         "**.subLayers[]": { "id": ["sid"], "order": "ordered" },
-        "**.instances[]": { "id": ["uid"], "order": "ordered" },
-        "nonworld-instances[]": { "id": ["uid"], "order": "set" },
+        "**.instances[]": { "id": ["uid"], "also": ["sid"], "moves": true, "order": "ordered" },
+        "nonworld-instances[]": { "id": ["uid"], "also": ["sid"], "order": "set" },
         "**.effectTypes[]": { "id": ["name"], "order": "ordered" },
         "**.sceneGraphData.children[]": { "id": ["uid"], "order": "ordered" },
         "**.ownData.tilemapData": { "atomic": true },

@@ -13,7 +13,7 @@ for (const c of CASES) {
     let base: any = JSON.parse(read(c.file));
     if (c.base) c.base(base);
     const baseText = c.base === null ? null : c3(base);
-    const r = mergeFile(c.file, baseText, c3(edited(base, c.ours)), c3(edited(base, c.theirs)));
+    const r = mergeFile(c.file, baseText, c3(edited(base, c.ours)), c3(edited(base, c.theirs)), c.context);
     assert.deepEqual(r.warnings.map((w) => w.path), c.warnings ?? [], "warnings");
     if (c.merged) {
       assert.deepEqual(r.conflicts, [], "no conflicts");

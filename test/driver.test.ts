@@ -97,6 +97,44 @@ test("rebase and cherry-pick go through the driver too", () => {
   }
 });
 
+// Rename an object type the way C3 does: its file and name, and every reference.
+function renameType(r: ReturnType<typeof repo>, from: string, to: string) {
+  const fix = (v: any): any => {
+    if (Array.isArray(v)) return v.map(fix);
+    if (v && typeof v === "object") {
+      for (const [k, e] of Object.entries(v)) v[k] = (k === "type" || k === "objectClass") && e === from ? to : fix(e);
+      return v;
+    }
+    return v;
+  };
+  for (const rel of ["layouts/Layout 1.json", "layouts/Layout 2.json", "eventSheets/Event sheet 1.json", "eventSheets/Event sheet 2.json"]) r.edit(rel, fix);
+  r.edit("families/Family1.json", (v) => { v.members = v.members.map((m: string) => (m === from ? to : m)); });
+  r.edit("project.c3proj", (v) => { v.objectTypes.items = v.objectTypes.items.map((m: string) => (m === from ? to : m)); });
+  r.edit(`objectTypes/${from}.json`, (v) => { v.name = to; });
+  r.git("mv", `game/objectTypes/${from}.json`, `game/objectTypes/${to}.json`);
+}
+
+test("merge and rebase: an object type renamed on one side reaches the other side's new instances", () => {
+  for (const op of ["merge", "rebase"]) {
+    const r = repo();
+    try {
+      r.git("checkout", "-qb", "feature");
+      r.edit("layouts/Layout 1.json", (v) => {
+        const i = structuredClone(v.layers[0].instances[0]);
+        Object.assign(i, { uid: 50, sid: 100000000000050 }); v.layers[0].instances.push(i);
+      });
+      r.commit("new Sprite instance");
+      r.git("checkout", "-q", "main");
+      renameType(r, "Sprite", "Hero");
+      r.commit("rename Sprite to Hero");
+      const res = op === "merge" ? r.run("merge", "--no-edit", "feature") : (r.git("checkout", "-q", "feature"), r.run("rebase", "main"));
+      assert.equal(res.status, 0, `${op}: ${res.stdout}${res.stderr}`);
+      const types = JSON.parse(r.read("layouts/Layout 1.json")).layers[0].instances.map((i: any) => `${i.type}#${i.uid}`);
+      assert.ok(types.includes("Hero#50") && !types.some((t: string) => t.startsWith("Sprite")), `${op}: ${types}`);
+    } finally { r.cleanup(); }
+  }
+});
+
 test("JSON under files/: git's merge when it works, structural when git conflicts", () => {
   const r = repo();
   try {

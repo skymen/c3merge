@@ -14,9 +14,7 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [core] Match elements by uid *or* sid (exact keys): 150 "deleted vs changed" instances in `cad4249b` are the same instances with a renumbered uid on one side and new sids on the other ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#the-deleted-on-one-side-changed-on-the-other-instances-2026-09-23))
-- [core] Moves between lists of one file (instance moved to another layer, same uid): 61 conflicts today, and resolving them can duplicate the uid ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#the-deleted-on-one-side-changed-on-the-other-instances-2026-09-23))
-- [core] Project context in the driver (merge: GITHEAD_* env; rebase: rebase-merge/done): apply the other side's object type renames (same sid, new name) to references, and don't count C3's automatic changes (rename propagation, family variables filled in) as edits. Waiting on skymen ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#renames-need-the-whole-project))
+- [check] Renames in files git merged without the driver (only one side changed them): `check` should say "type X doesn't exist; renamed to Y on the other side of this merge" and `check --fix` apply it (`85c85d2a`: MT2-2, Subhub-Trials1/2) ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#project-context-srccontextts-skymen-2026-09-23))
 
 ## Normal
 
@@ -28,7 +26,7 @@ packaging/release · `[docs]`
 
 ## Later
 
-- [profiles] Line-level 3-way merge for script action lines (`script[]`), key timeline tracks by what they animate ([tasks/profiles.md](tasks/profiles.md#later))
+- [profiles] Script events that store their code as one string (`"script": "…\n…"`) should get the line merge too; key timeline tracks by what they animate ([tasks/profiles.md](tasks/profiles.md#later))
 - [check] Repair mode: `check --fix` for the classes C3 does *not* repair itself (dedupe sids, drop dangling references with a report)
 - [driver] `git rebase` / `cherry-pick` / `stash pop` behavior: verify driver fires and collision log is still reachable
 - [driver] Binary assets (PNG, audio) stay ordinary git conflicts — document, don't try to merge

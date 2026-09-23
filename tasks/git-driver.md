@@ -9,6 +9,12 @@ two lab-base branches and has C3 open and re-save the result (opens cleanly on r
 save differs only by C3's own r449 → r495 upgrade).
 
 ## As built (2026-09-23)
+- Project context (renames, what types gained): built from git when the driver can tell
+  which commits are merged (`GITHEAD_<sha>` for merge, `.git/rebase-merge/done` for rebase),
+  cached in `.git/c3merge/context.json` per (base, ours, theirs). Tested with a real merge
+  and rebase where one branch renames an object type and the other adds instances of it.
+  `85c85d2a` replayed: 9 conflicted files with git alone, 3 with c3merge (8 conflicts on
+  one layout, all C3 float noise; 2 layouts ours deleted, git's own modify/delete).
 - JSON outside the C3 kinds (`files/`, `scripts/`, skymen): git's line merge first; kept
   when clean and still valid JSON, otherwise the structural merge with default rules, in
   the file's own style. Other files there (JS, images...) are never routed to c3merge.
