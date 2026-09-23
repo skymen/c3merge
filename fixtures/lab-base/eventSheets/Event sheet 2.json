@@ -59,6 +59,26 @@
 			"isActiveOnStart": true,
 			"children": [
 				{
+					"eventType": "variable",
+					"name": "Variable3",
+					"type": "string",
+					"initialValue": "",
+					"comment": "",
+					"isStatic": false,
+					"isConstant": false,
+					"sid": 122617798899041
+				},
+				{
+					"eventType": "variable",
+					"name": "Variable4",
+					"type": "number",
+					"initialValue": "0",
+					"comment": "",
+					"isStatic": true,
+					"isConstant": false,
+					"sid": 380642713205020
+				},
+				{
 					"aceType": "action",
 					"aceName": "Action1",
 					"objectClass": "Family1",

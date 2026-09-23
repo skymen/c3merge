@@ -4,9 +4,33 @@
 	"sid": 722440670926540,
 	"isGlobal": false,
 	"editorNewInstanceIsReplica": true,
-	"instanceVariables": [],
+	"instanceVariables": [
+		{
+			"name": "myVarToo",
+			"type": "string",
+			"desc": "",
+			"show": true,
+			"sid": 966299781148524
+		},
+		{
+			"name": "myBool",
+			"type": "boolean",
+			"desc": "",
+			"show": true,
+			"sid": 141893451587728
+		}
+	],
 	"behaviorTypes": [],
-	"effectTypes": [],
+	"effectTypes": [
+		{
+			"effectId": "colorblend",
+			"name": "Color"
+		},
+		{
+			"effectId": "vignette",
+			"name": "Vignette"
+		}
+	],
 	"animations": {
 		"items": [
 			{

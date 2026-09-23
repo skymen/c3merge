@@ -19,7 +19,7 @@ packaging/release · `[docs]`
 - [core] Generic keyed 3-way merge engine: identity matching, sid fallback, order-semantic lists, delete-vs-modify, collision log, exit codes ([tasks/core-merge-engine.md](tasks/core-merge-engine.md))
 - [core] Output must be byte-identical to what C3 writes for untouched regions: tabs, key order, number formatting, trailing newline ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#output-fidelity))
 - [driver] Git merge driver: `%O %A %B %P` protocol, `.gitattributes` template, `install` / `init` / `doctor` commands ([tasks/git-driver.md](tasks/git-driver.md))
-- [lab] Finish the matrix: 7 rows need content in `fixtures/lab-base` (layer-name action, call to Function1, instance variable on Sprite, timeline track, hierarchy, global variable, effect); row 21 needs a real old-release project. 27 rows done: [reports/lab-matrix.md](reports/lab-matrix.md) ([tasks/lab-experiments.md](tasks/lab-experiments.md))
+- [check] Implement `c3merge check` from the lab's severities (`reports/lab-matrix.json`, worst across r449/r495/r503) ([tasks/check-validator.md](tasks/check-validator.md))
 
 ## Normal
 

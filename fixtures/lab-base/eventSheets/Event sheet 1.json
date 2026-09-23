@@ -2,6 +2,26 @@
 	"name": "Event sheet 1",
 	"events": [
 		{
+			"eventType": "variable",
+			"name": "Variable1",
+			"type": "number",
+			"initialValue": "0",
+			"comment": "",
+			"isStatic": false,
+			"isConstant": false,
+			"sid": 648356039841434
+		},
+		{
+			"eventType": "variable",
+			"name": "Variable2",
+			"type": "boolean",
+			"initialValue": "false",
+			"comment": "",
+			"isStatic": false,
+			"isConstant": false,
+			"sid": 710434085208045
+		},
+		{
 			"eventType": "block",
 			"conditions": [
 				{
@@ -12,14 +32,26 @@
 			],
 			"actions": [
 				{
-					"id": "set-quaternion",
+					"id": "set-shape",
 					"objectClass": "3DShape",
-					"sid": 715639464350228,
+					"sid": 580325053976941,
 					"parameters": {
-						"x-component": "0",
-						"y-component": "0",
-						"z-component": "0",
-						"w-component": "1"
+						"shape": "box"
+					}
+				},
+				{
+					"callFunction": "Function1",
+					"sid": 648913729152520,
+					"parameters": [
+						"67"
+					]
+				},
+				{
+					"id": "move-to-layer",
+					"objectClass": "Sprite",
+					"sid": 226022929208906,
+					"parameters": {
+						"layer": "\"Layer 0\""
 					}
 				}
 			],

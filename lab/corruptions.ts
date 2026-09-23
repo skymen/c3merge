@@ -106,15 +106,27 @@ export const corruptions: Corruption[] = [
     apply: (d) => editJson(d, ES1, (s) => {
       const a = findEvent(s.events, (e) => (e.actions ?? []).some((x: Json) => x.parameters?.layer))!.actions.find((x: Json) => x.parameters?.layer);
       a.parameters.layer = "\"No such layer\"";
-    }) },
+    }),
+    present: async (d) => (await text(d, ES1)).includes("No such layer") },
   { row: "13", title: "call-function → nonexistent function",
-    needs: async (d) => /"callFunction"|"call-function"|"function-name"|Function1\(/.test(await readFile(path.join(d, ES1), "utf8") + await readFile(path.join(d, ES2), "utf8")) ? null : "an action that calls Function1",
-    apply: async () => { throw new Error("not written yet: needs a real call-function action to learn its shape"); } },
+    needs: has(ES1, /"callFunction"/, "an action that calls Function1"),
+    apply: (d) => editJson(d, ES1, (s) => {
+      const a = allEvents(s.events).flatMap((e) => e.actions ?? []).find((x: Json) => x.callFunction);
+      a.callFunction = "NoSuchFunction";
+    }),
+    present: async (d) => (await text(d, ES1)).includes("NoSuchFunction") },
   { row: "14", title: "instance variable on instance not declared on type",
     apply: (d) => editJson(d, L1, (l) => { inst(l, "Sprite").instanceVariables = { ...inst(l, "Sprite").instanceVariables, c3mergeUndeclared: 5 }; }) },
   { row: "15", title: "type declares variable, instance lacks it",
     needs: async (d) => (await readJson(d, "objectTypes/Sprite.json")).instanceVariables.length ? null : "an instance variable declared on Sprite (e.g. hp = 10)",
-    apply: (d) => editJson(d, L1, (l) => { inst(l, "Sprite").instanceVariables = {}; }) },
+    apply: async (d) => {
+      const declared = (await readJson(d, "objectTypes/Sprite.json")).instanceVariables[0].name;
+      await editJson(d, L1, (l) => { delete inst(l, "Sprite").instanceVariables[declared]; });
+    },
+    present: async (d) => {
+      const declared = (await readJson(d, "objectTypes/Sprite.json")).instanceVariables[0].name;
+      return !(declared in inst(await readJson(d, L1), "Sprite").instanceVariables);
+    } },
   { row: "16", title: "family member → nonexistent type",
     apply: (d) => editJson(d, "families/Family1.json", (f) => { f.members.push("NoSuchType"); }) },
   { row: "17", title: "family members of mixed plugins",
@@ -161,18 +173,30 @@ export const corruptions: Corruption[] = [
     present: async (d) => { const t = inst(await readJson(d, L2), "Tilemap").ownData.tilemapData; const n = t.data.split(",").reduce((a: number, run: string) => a + (run.includes("x") ? Number(run.split("x")[0]) : 1), 0); return n !== t.width * t.height; },
     apply: (d) => editJson(d, L2, (l) => { const t = inst(l, "Tilemap").ownData.tilemapData; t.data = t.data.slice(0, Math.floor(t.data.length / 2)); }) },
   { row: "30", title: "timeline references deleted instance uid",
-    needs: async (d) => (await readJson(d, "timelines/Timeline 1.json")).tracks.length ? null : "a timeline track animating an instance",
-    apply: (d) => editJson(d, "timelines/Timeline 1.json", (t) => { for (const k of ["instanceUid", "instance-uid", "uid"]) if (t.tracks[0][k] !== undefined) t.tracks[0][k] = 999999; }) },
-  { row: "31", title: "hierarchy child references missing uid",
-    needs: has(L1, /"children"|"hierarchy"|"sceneGraph"/i, "a hierarchy (e.g. TiledBackground as a child of Sprite)"),
-    apply: async () => { throw new Error("not written yet: needs a real hierarchy to learn its shape"); } },
+    needs: async (d) => (await readJson(d, "timelines/Timeline 1.json")).tracks.some((t: Json) => "worldInstance" in t) ? null : "a timeline track animating an instance",
+    apply: (d) => editJson(d, "timelines/Timeline 1.json", (t) => { t.tracks.find((x: Json) => "worldInstance" in x).worldInstance = 999999; }),
+    present: async (d) => (await readJson(d, "timelines/Timeline 1.json")).tracks.some((t: Json) => t.worldInstance === 999999) },
+  { row: "31", title: "hierarchy parent lists a child uid that doesn't exist",
+    needs: has(L1, /"sceneGraphData"/, "a hierarchy (e.g. TiledBackground as a child of Sprite)"),
+    apply: (d) => editJson(d, L1, (l) => {
+      l.layers.flatMap((x: Json) => x.instances).find((i: Json) => i.sceneGraphData?.children?.length).sceneGraphData.children[0].uid = 999999;
+    }),
+    present: async (d) => (await text(d, L1)).includes("999999") },
+  { row: "31b", title: "hierarchy child's parent-uid doesn't exist",
+    needs: has(L1, /"sceneGraphData"/, "a hierarchy (e.g. TiledBackground as a child of Sprite)"),
+    apply: (d) => editJson(d, L1, (l) => {
+      l.layers.flatMap((x: Json) => x.instances).find((i: Json) => i.sceneGraphData?.["parent-uid"] != null).sceneGraphData["parent-uid"] = 999999;
+    }),
+    present: async (d) => (await text(d, L1)).includes("999999") },
   { row: "32", title: "global variable name duplicated",
     needs: has(ES1, /"eventType":\s*"variable"/, "a global variable in Event sheet 1"),
-    apply: (d) => editJson(d, ES1, (s) => { const v = s.events.find((e: Json) => e.eventType === "variable"); s.events.push({ ...v, sid: 222222222222222 }); }) },
+    apply: (d) => editJson(d, ES1, (s) => { const v = s.events.find((e: Json) => e.eventType === "variable"); s.events.push({ ...v, sid: 222222222222222 }); }),
+    present: async (d) => hasDup(allEvents((await readJson(d, ES1)).events).filter((e) => e.eventType === "variable").map((e) => e.name)) },
   { row: "33", title: "event with 0 conditions + 0 actions (empty block)",
     present: async (d) => allEvents((await readJson(d, ES1)).events).some((e) => e.eventType === "block" && !e.conditions?.length && !e.actions?.length),
     apply: (d) => editJson(d, ES1, (s) => { s.events.push({ eventType: "block", conditions: [], actions: [], sid: 333333333333333 }); }) },
   { row: "34", title: "two effects with same name on one type",
     needs: async (d) => (await readJson(d, "objectTypes/Sprite.json")).effectTypes.length ? null : "an effect on Sprite (e.g. Grayscale)",
-    apply: (d) => editJson(d, "objectTypes/Sprite.json", (t) => { t.effectTypes.push({ ...t.effectTypes[0] }); }) },
+    apply: (d) => editJson(d, "objectTypes/Sprite.json", (t) => { t.effectTypes.push({ ...t.effectTypes[0] }); }),
+    present: async (d) => hasDup((await readJson(d, "objectTypes/Sprite.json")).effectTypes.map((e: Json) => e.name)) },
 ];

@@ -2,7 +2,15 @@
 	"name": "Family1",
 	"plugin-id": "Sprite",
 	"sid": 649297295790655,
-	"instanceVariables": [],
+	"instanceVariables": [
+		{
+			"name": "myVar",
+			"type": "number",
+			"desc": "",
+			"show": true,
+			"sid": 715550433878570
+		}
+	],
 	"behaviorTypes": [],
 	"effectTypes": [],
 	"members": [

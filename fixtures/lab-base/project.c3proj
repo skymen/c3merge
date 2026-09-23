@@ -40,6 +40,20 @@
 			"name": "Tilemap",
 			"author": "Scirra",
 			"bundled": false
+		},
+		{
+			"type": "effect",
+			"id": "colorblend",
+			"name": "Color",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "effect",
+			"id": "vignette",
+			"name": "Vignette",
+			"author": "Brad Larson",
+			"bundled": false
 		}
 	],
 	"uniqueId": "2ou5bm05pn5",

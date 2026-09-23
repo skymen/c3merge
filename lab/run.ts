@@ -5,11 +5,11 @@
 //
 // Output: lab/out/<stamp>/ (inputs, saved copies, raw JSON; gitignored) and
 // reports/lab-matrix.md (the table, committed).
-import { C3Editor, resolveRelease } from "c3cli";
+import { C3Editor, resolveRelease, type Release } from "c3cli";
 import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { corruptions, type Corruption } from "./corruptions.ts";
+import { corruptions, editJson, type Corruption } from "./corruptions.ts";
 
 const { values: args } = parseArgs({
   options: {
@@ -69,7 +69,8 @@ async function differingFiles(a: string, b: string): Promise<string[]> {
   return out;
 }
 
-async function runOne(editor: C3Editor, release: string, c: Corruption | null, controlSaved: string | null): Promise<RowResult & { savedDir: string | null }> {
+async function runOne(editor: C3Editor, rel: Release, c: Corruption | null, controlSaved: string | null): Promise<RowResult & { savedDir: string | null }> {
+  const release = rel.name;
   const row = c?.row ?? "control";
   const dir = path.join(OUT, release, row);
   const input = path.join(dir, "input");
@@ -78,6 +79,9 @@ async function runOne(editor: C3Editor, release: string, c: Corruption | null, c
     row, title: c?.title ?? "untouched base project", release, editor: "error", dialogs: [], survivedIn: [], dropped: [], present: null, preview: "n/a", cause: "", detail: "", savedDir: null,
   };
   await cp(BASE, input, { recursive: true });
+  // The base is saved by a recent release; an older editor (e.g. the r449 LTS) refuses it on
+  // that number alone. Lower it in this copy so the older editor judges the content itself.
+  await editJson(input, "project.c3proj", (p) => { if (p.savedWithRelease > rel.num) p.savedWithRelease = rel.num; });
   if (c) {
     const missing = await c.needs?.(input);
     if (missing) return { ...r, editor: "skipped", detail: `base project needs ${missing}` };
@@ -147,13 +151,13 @@ try {
       : await resolveRelease({ branch: branchOrRelease as "stable" | "beta" | "lts" });
     const label = `${branchOrRelease} (${rel.name})`;
     console.log(`\n== ${label}: control`);
-    const control = await runOne(editor, rel.name, null, null);
+    const control = await runOne(editor, rel, null, null);
     console.log(`   control: ${control.editor}${control.detail ? ` — ${control.detail}` : ""}, preview ${control.preview}`);
     if (!control.savedDir) { console.log("   control did not save; skipping this release"); continue; }
     results.push(control);
     const t0 = Date.now();
     const rowResults = await pool(rows, tabs, async (c) => {
-      const r = await runOne(editor, rel.name, c, control.savedDir).catch((e) => ({ row: c.row, title: c.title, release: rel.name, editor: "error" as const, dialogs: [], survivedIn: [], dropped: [], present: null, preview: "n/a", cause: "", detail: (e as Error).message.split("\n")[0], savedDir: null }));
+      const r = await runOne(editor, rel, c, control.savedDir).catch((e) => ({ row: c.row, title: c.title, release: rel.name, editor: "error" as const, dialogs: [], survivedIn: [], dropped: [], present: null, preview: "n/a", cause: "", detail: (e as Error).message.split("\n")[0], savedDir: null }));
       console.log(`   ${r.row.padEnd(4)} ${r.editor.padEnd(20)} present: ${String(r.present).padEnd(5)} preview: ${r.preview.slice(0, 40)}`);
       return r;
     });
@@ -194,6 +198,7 @@ async function writeMatrix(results: RowResult[]) {
     "- **repairs silently**: opens with no dialog, and the corruption is gone from the Save as output (C3 may repair differently from the original, e.g. renumber UIDs).",
     "- **loads with notice**: opens, but shows a dialog (listed).",
     "- **refuses** / **crashes**: does not open. The dialog is almost always the generic \"Failed to open project\"; the cell shows the editor's own exception from the console.",
+    "- For releases older than the base project (the r449 LTS), the harness lowers `savedWithRelease` in its working copy, so the old editor judges the content rather than refusing on the number.",
     "- Plain Ctrl+S only rewrites files C3 considers changed (on both releases), so a corruption in an untouched file stays on disk until C3 touches it. That's why this lab uses Save as.",
     "",
     `| # | Corruption | ${releases.map((r) => `Editor ${r} | Preview ${r}`).join(" | ")} |`,

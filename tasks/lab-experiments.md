@@ -1,10 +1,10 @@
 # Lab: what does C3 tolerate?
 
-**Status:** 27 of 34 rows measured on r495-2 (stable) and r502 (beta), 2026-09-23. Harness
+**Status:** all 38 rows (34 + variants) measured on r449-5 (LTS), r495-2 (stable) and r503
+(beta), 2026-09-23. Only rows 19 and 29 differ between releases. Harness
 in `lab/` (`npm run lab -- [--releases stable,beta] [--rows …]`), results in
 [reports/lab-matrix.md](../reports/lab-matrix.md), severities in
-[check-validator.md](check-validator.md). The 7 remaining rows need content in
-`fixtures/lab-base` (listed in the report); row 21 needs a real old project.
+[check-validator.md](check-validator.md).
 
 ## How the harness works (2026-09-23)
 - For each release: a control run (the untouched base), then every row in parallel on a
@@ -23,10 +23,10 @@ in `lab/` (`npm run lab -- [--releases stable,beta] [--rows …]`), results in
   thinks changed (skymen, confirmed by rows 26–27 before the switch to Save as).
 
 ## LTS (r449-5)
-The r449 editor refuses the current lab-base: `missing action id 'set-quaternion'` (a 3D
-shape action newer than r449). To add an LTS column, author lab-base in r449-5
-(`editor.construct.net/r449-5`). Newer releases open it too, so one base covers LTS,
-stable and beta.
+lab-base uses only features r449 has (skymen swapped out the 3D shape `set-quaternion`
+action). It's still saved by r495-2, so for releases older than the base the harness
+lowers `savedWithRelease` in its working copy; the old editor then judges the content.
+Row 21 is meaningless on r449 itself (it *is* r449).
 
 ## What the lab corrected
 - "C3 regenerates missing/duplicate sids silently": **half true**. Duplicate uids are

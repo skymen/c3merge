@@ -1,10 +1,14 @@
 # `c3merge check` — cross-file validator
 
-**Status:** not started (2026-09-21). Severities for 27 of 34 invariants come from the lab
-run of 2026-09-23 ([reports/lab-matrix.md](../reports/lab-matrix.md)); the rest stay
-`warning` until measured.
+**Status:** not started (2026-09-21). Severities for all 38 lab rows come from the run of
+2026-09-23 on r449-5 (LTS), r495-2 (stable) and r503 (beta):
+[reports/lab-matrix.md](../reports/lab-matrix.md), data in `reports/lab-matrix.json`.
 
-## Severity from the lab (r495-2 stable and r502 beta agree on every row)
+**Rule across releases:** severity = the worst behaviour among measured releases, since a
+team's project must open in whatever release each member runs. Only 2 of 38 rows differ
+between r449 and r503 (19 and 29, both worse on r449).
+
+## Severity from the lab
 
 C3's loader is strict: almost every dangling reference makes the whole project fail to
 open, behind the generic dialog "Failed to open project" (the real reason is only in the
@@ -25,6 +29,11 @@ console). `check` has to catch these, because the user sees nothing useful.
 - layer name duplicated within a layout (`layer name '…' already used`), row 24
 - two object type files with the same `name` (`unexpected object type name`), row 25
 - required key missing, e.g. instance `world` (a crash inside the loader), row 28
+- call-function action → function that doesn't exist (`invalid function name`), row 13
+- timeline track → instance uid that doesn't exist (`no compatible instance found for timeline track`), row 30
+- `usedAddons` entry marked `bundled: true` without its `.c3addon` in `addons/` (r449
+  refuses: `Failed to read file 'addons/plugin/Sprite.c3addon'`; newer releases ignore it
+  for built-in plugins), row 19
 - (environment, not a project error) `savedWithRelease` newer than the editor, row 20
 
 **error: silent data loss**
@@ -33,11 +42,16 @@ console). `check` has to catch these, because the user sees nothing useful.
   file but loses its list entry makes content vanish.
 
 **error: loads in the editor, fails at runtime**
-- tilemap `tilemapData.data` inconsistent with width × height: the editor opens it, the
-  preview doesn't start ("Failed to start preview", `expected finite number`), row 29.
+- tilemap `tilemapData.data` inconsistent with width × height: r495+ open it but the
+  preview doesn't start ("Failed to start preview", `expected finite number`); r449
+  refuses to open it with the same error, row 29.
 
 **warning: C3 keeps it as-is (loads, previews, and writes it back unchanged)**
 - event `sid` duplicated, row 4: Save as writes both events with the same sid.
+- action parameter naming a layer that doesn't exist, row 12 (preview runs).
+- global variable name duplicated, row 32 (preview runs; which one wins is unknown).
+- two effects with the same name on one type, row 34 (preview runs; instances key effect
+  settings by name, so one set is ambiguous).
 - empty event block (0 conditions, 0 actions), row 33. Probably harmless: info at most.
 
 **none: C3 repairs it, don't check**
@@ -46,17 +60,15 @@ console). `check` has to catch these, because the user sees nothing useful.
   that came from comparing bytes with the control's save, which the renumbering changes.
 - event `sid` missing, row 5: regenerated.
 - `savedWithRelease` older (r449-5, the LTS), row 21: loads, and the save bumps it.
+- instance missing a variable its type declares, row 15: added back with the default.
+- hierarchy parent listing a child uid that doesn't exist, or a child whose `parent-uid`
+  doesn't exist, rows 31 and 31b: the dangling link is dropped.
 - `usedAddons` missing an addon, or a wrong version/bundled flag, rows 18 and 19: rebuilt
   on save.
 - key order, indentation, CRLF, unknown keys (top level or in events), rows 26 and 27:
   normalized when C3 writes the file. But Ctrl+S only rewrites files C3 considers changed,
   so a badly formatted file stays that way on disk. c3merge's own output must still be
   canonical ([core-merge-engine.md](core-merge-engine.md#output-fidelity)).
-
-**not measured yet** (the base project lacks the content, see the report's "Not run"):
-layer-name parameters (12), call to a missing function (13), declared variable missing on
-an instance (15), timeline → deleted uid (30), hierarchy → missing uid (31), duplicate
-global variable (32), duplicate effect name (34).
 
 **Not overfitting to one release (skymen, 2026-09-23).** c3merge has to keep working on
 future C3 releases without code changes. So:
