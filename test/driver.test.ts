@@ -166,6 +166,26 @@ test("finish step: after a clean merge, renames reach files the merge didn't, le
   } finally { r.cleanup(); }
 });
 
+test("finish step: a global variable renamed on one side reaches a new event sheet from the other", () => {
+  const r = repo();
+  try {
+    installHooks(r.dir, C3MERGE);
+    r.git("checkout", "-qb", "feature");
+    writeFileSync(r.file("eventSheets/Event sheet 3.json"), c3({ name: "Event sheet 3", events: [{ eventType: "block", conditions: [], actions: [
+      { id: "set-eventvar-value", objectClass: "System", sid: 31, parameters: { variable: "Variable1", value: "Variable1 + 1" } }], sid: 30 }], sid: 3 }));
+    r.edit("project.c3proj", (v) => v.eventSheets.items.push("Event sheet 3"));
+    r.commit("Event sheet 3");
+    r.git("checkout", "-q", "main");
+    r.edit("eventSheets/Event sheet 1.json", (v) => { v.events[0].name = "Speed"; });
+    r.commit("rename Variable1 to Speed");
+    const m = r.run("merge", "--no-edit", "feature");
+    assert.equal(m.status, 0, m.stderr);
+    assert.match(m.stderr, /Variable1 → Speed \(global variable\)/);
+    const action = JSON.parse(r.read("eventSheets/Event sheet 3.json")).events[0].actions[0];
+    assert.deepEqual(action.parameters, { variable: "Speed", value: "Speed + 1" });
+  } finally { r.cleanup(); }
+});
+
 test("finish step: new frames the other side added to a renamed object follow the rename", () => {
   const r = repo();
   try {

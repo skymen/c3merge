@@ -9,7 +9,7 @@
 // Rule (DESIGN.md "Engine"): only merge what is certainly right, anything else is a conflict.
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { ProjectContext, Table } from "../src/context.ts";
+import { eventTable, type ProjectContext, type Table } from "../src/context.ts";
 
 export type Edit = (v: any) => void;
 export interface Case {
@@ -96,6 +96,23 @@ const renameVarOnInstances = (v: any) => {
 };
 const addAction = (a: object): Edit => (v) => { block(v).actions.push(a); };
 const touchSheet: Edit = (v) => { block(v).actions[0].parameters.shape = "prism"; }; // so both sides changed the file
+// Event contexts: each version's event sheets (Event sheet 1 and 2), edited.
+const ES2 = "eventSheets/Event sheet 2.json";
+const sheet = (file: string, edit: Edit = () => {}) => { const v = JSON.parse(read(file)); edit(v); return v; };
+const evCtx = (base: [Edit?, Edit?], ours: [Edit?, Edit?], theirs: [Edit?, Edit?]): ProjectContext => ({
+  base: {}, ours: {}, theirs: {},
+  events: Object.fromEntries(([["base", base], ["ours", ours], ["theirs", theirs]] as const).map(([k, [e1, e2]]) => [k, eventTable([sheet(ES1, e1), sheet(ES2, e2)])])) as any,
+});
+const group1 = (v: any) => v.events.find((e: any) => e.eventType === "group");
+const fn1 = (v: any) => v.events.find((e: any) => e.functionName);
+const renameGlobal: Edit = (v) => { v.events[0].name = "Speed"; };             // Event sheet 1: Variable1 → Speed
+const renameLocal: Edit = (v) => { group1(v).children[0].name = "Count"; };    // Event sheet 2: Variable3 → Count
+const renameFn: Edit = (v) => { fn1(v).functionName = "doThing"; };           // Event sheet 2: Function1 → doThing
+const renameParam: Edit = (v) => { fn1(v).functionParameters[0].name = "amount"; };
+const addParam: Edit = (v) => { fn1(v).functionParameters.push({ name: "speed", type: "number", initialValue: "5", comment: "", sid: 777 }); };
+const dropParam: Edit = (v) => { fn1(v).functionParameters = []; };
+const call1 = (v: any) => block(v).actions[1]; // Event sheet 1: callFunction Function1 ["67"]
+const blockWith = (sid: number, actions: object[]) => ({ eventType: "block", conditions: [], actions, sid });
 const renameSprite = (v: any) => { for (const l of v.layers) for (const i of l.instances) if (i.type === "Sprite") i.type = "Hero"; };
 const L1_LAYER = layerPath(L1);
 
@@ -338,8 +355,9 @@ export const CASES: Case[] = [
     // C3 updates structured references (objectClass) but leaves expressions: they still resolve.
     name: "a rename that only changes case: structured references follow, expressions stay",
     file: ES1, context: ctx([SPRITE_T], [with_(SPRITE_T, { name: "sprite" })], [SPRITE_T]),
-    ours: touchSheet, theirs: addAction({ id: "x", objectClass: "Sprite", sid: 907, parameters: { value: "Sprite.X" } }),
-    merged: both(touchSheet, addAction({ id: "x", objectClass: "sprite", sid: 907, parameters: { value: "Sprite.X" } })),
+    ours: both(touchSheet, (v) => { block(v).actions[2].objectClass = "sprite"; }), // what C3 does on the renaming side
+    theirs: addAction({ id: "x", objectClass: "Sprite", sid: 907, parameters: { value: "Sprite.X" } }),
+    merged: both(touchSheet, (v) => { block(v).actions[2].objectClass = "sprite"; }, addAction({ id: "x", objectClass: "sprite", sid: 907, parameters: { value: "Sprite.X" } })),
   },
   {
     // skymen: one side adds a local `foo` next to `bar`, the other renames `bar` to `foo`.
@@ -371,6 +389,75 @@ export const CASES: Case[] = [
     file: ES1, context: ctx([SPRITE_T, FAM_T], [SPRITE_T, with_(FAM_T, { vars: [[31, "fvar"]] })], [SPRITE_T, FAM_T]),
     ours: touchSheet, theirs: addAction({ id: "x", objectClass: "Sprite", sid: 905, parameters: { value: "Sprite.fv + Family1.fv + Self.fv" } }),
     merged: both(touchSheet, addAction({ id: "x", objectClass: "Sprite", sid: 905, parameters: { value: "Sprite.fvar + Family1.fvar + Self.fvar" } })),
+  },
+
+  // ── event variables and functions (tasks/event-renames.md) ─────────────────────────
+  {
+    name: "global variable renamed in another sheet, used on the other side",
+    file: ES1, context: evCtx([], [renameGlobal], []),
+    ours: renameGlobal,
+    theirs: addAction({ id: "set-eventvar-value", objectClass: "System", sid: 910, parameters: { variable: "Variable1", value: "Variable1 + 1" } }),
+    merged: both(renameGlobal, addAction({ id: "set-eventvar-value", objectClass: "System", sid: 910, parameters: { variable: "Speed", value: "Speed + 1" } })),
+  },
+  {
+    // A local's rename only reaches its scope; another group may have its own Variable3.
+    name: "local variable renamed: only its scope follows",
+    file: ES2, context: evCtx([], [undefined, renameLocal], [undefined, (v) => { v.events.push({ eventType: "group", title: "Group2", disabled: false, description: "", isActiveOnStart: true, sid: 920, children: [{ eventType: "variable", name: "Variable3", type: "number", initialValue: "0", comment: "", isStatic: false, isConstant: false, sid: 921 }] }); }]),
+    ours: renameLocal,
+    theirs: (v) => {
+      group1(v).children.push(blockWith(911, [{ id: "set-eventvar-value", objectClass: "System", sid: 912, parameters: { variable: "Variable3", value: "Variable3 * 2" } }]));
+      v.events.push({ eventType: "group", title: "Group2", disabled: false, description: "", isActiveOnStart: true, sid: 920, children: [
+        { eventType: "variable", name: "Variable3", type: "number", initialValue: "0", comment: "", isStatic: false, isConstant: false, sid: 921 },
+        blockWith(922, [{ id: "set-eventvar-value", objectClass: "System", sid: 923, parameters: { variable: "Variable3", value: "Variable3 + 1" } }]),
+      ] });
+    },
+    merged: (v) => {
+      renameLocal(v);
+      group1(v).children.push(blockWith(911, [{ id: "set-eventvar-value", objectClass: "System", sid: 912, parameters: { variable: "Count", value: "Count * 2" } }]));
+      v.events.push({ eventType: "group", title: "Group2", disabled: false, description: "", isActiveOnStart: true, sid: 920, children: [
+        { eventType: "variable", name: "Variable3", type: "number", initialValue: "0", comment: "", isStatic: false, isConstant: false, sid: 921 },
+        blockWith(922, [{ id: "set-eventvar-value", objectClass: "System", sid: 923, parameters: { variable: "Variable3", value: "Variable3 + 1" } }]),
+      ] });
+    },
+  },
+  {
+    name: "function parameter renamed: its uses inside the function follow",
+    file: ES2, context: evCtx([], [undefined, renameParam], []),
+    ours: renameParam,
+    theirs: (v) => { fn1(v).actions = [{ id: "set-eventvar-value", objectClass: "System", sid: 913, parameters: { variable: "Variable1", value: "test * 2" } }]; },
+    merged: (v) => { renameParam(v); fn1(v).actions = [{ id: "set-eventvar-value", objectClass: "System", sid: 913, parameters: { variable: "Variable1", value: "amount * 2" } }]; },
+  },
+  {
+    name: "function renamed: the other side's new calls follow",
+    file: ES1, context: evCtx([], [undefined, renameFn], []),
+    ours: (v) => { call1(v).callFunction = "doThing"; }, // C3 renames the existing call
+    theirs: both(addAction({ callFunction: "Function1", sid: 914, parameters: ["1"] }), addAction({ id: "set-eventvar-value", objectClass: "System", sid: 915, parameters: { variable: "Variable1", value: "Functions.Function1(2) + 1" } })),
+    merged: both((v) => { call1(v).callFunction = "doThing"; }, addAction({ callFunction: "doThing", sid: 914, parameters: ["1"] }), addAction({ id: "set-eventvar-value", objectClass: "System", sid: 915, parameters: { variable: "Variable1", value: "Functions.doThing(2) + 1" } })),
+  },
+  {
+    // What C3 does to existing calls: the new parameter's default added.
+    name: "function parameter added: the other side's new calls get its default",
+    file: ES1, context: evCtx([], [undefined, addParam], []),
+    ours: (v) => { call1(v).parameters = ["67", "5"]; },
+    theirs: addAction({ callFunction: "Function1", sid: 916, parameters: ["1"] }),
+    merged: both((v) => { call1(v).parameters = ["67", "5"]; }, addAction({ callFunction: "Function1", sid: 916, parameters: ["1", "5"] })),
+  },
+  {
+    // C3 drops a removed parameter's argument from every call (6c2dba68: closeDialog).
+    name: "function parameter removed: the other side's new calls drop its argument",
+    file: ES1, context: evCtx([], [undefined, dropParam], []),
+    ours: (v) => { call1(v).parameters = []; },
+    theirs: addAction({ callFunction: "Function1", sid: 917, parameters: ["3"] }),
+    merged: both((v) => { call1(v).parameters = []; }, addAction({ callFunction: "Function1", sid: 917, parameters: [] })),
+  },
+  {
+    name: "function parameters changed, a call with an unexpected count: flagged",
+    file: ES1, context: evCtx([], [undefined, addParam], []),
+    ours: (v) => { call1(v).parameters = ["67", "5"]; },
+    theirs: addAction({ callFunction: "Function1", sid: 918, parameters: ["1", "2", "3"] }),
+    conflicts: ["function Function1 (sid 918) parameter parameters"],
+    takeOurs: both((v) => { call1(v).parameters = ["67", "5"]; }, addAction({ callFunction: "Function1", sid: 918, parameters: ["1", "2", "3"] })),
+    takeTheirs: both((v) => { call1(v).parameters = ["67", "5"]; }, addAction({ callFunction: "Function1", sid: 918, parameters: ["1", "2", "3"] })),
   },
 
   // ── event sheets (execution order) ──────────────────────────────────────────────────

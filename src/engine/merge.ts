@@ -6,7 +6,7 @@ import { changes, type Changes, type ProjectContext } from "../context.ts";
 import { profileFor, ruleFor, type Profile, type Rule } from "../profiles/index.ts";
 import { mergeLines } from "./lines.ts";
 import { reconcileMoves, type ForcedConflict } from "./moves.ts";
-import { applyRenames, flagLeftovers } from "./renames.ts";
+import { aceLabel, applyRenames, flagLeftovers } from "./renames.ts";
 import { detectStyle, render } from "./render.ts";
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
@@ -46,10 +46,17 @@ export function mergeFile(repoPath: string, base: string | null, ours: string, t
   const merged = m.merge(b, o, t, "", "", "");
   m.applyForced(merged, forced);
   if (context) flagLeftovers(profile.kind, merged, context, (ace, key, guess, reason) => {
-    const where = `${ace.objectClass ?? "function"} ${ace.id ?? ace.callFunction ?? ""} (sid ${ace.sid}) parameter ${key}`;
+    const where = aceLabel(ace, key);
+    // A call with the wrong number of arguments: no guess, the hunk only marks the spot.
+    if (guess === undefined) {
+      m.flag(where, `${reason}: fix the call in C3`);
+      if (key === "parameters") ace.parameters = new Conflict(ace.parameters, ace.parameters, ["as merged", "fix in C3"]);
+      return;
+    }
     m.flag(where, `may still use a name renamed on the other side (${reason}): check the guess in C3`);
-    const labels: [string, string] = ["as merged", "renamed (check)"];
     const v = ace.parameters[key];
+    if (v instanceof Conflict || v instanceof Run) return; // already marked
+    const labels: [string, string] = ["as merged", "renamed (check)"];
     ace.parameters[key] = Array.isArray(ace.parameters) ? new Run([v], [guess], labels) : new Conflict(v, guess, labels);
   });
   const result = { conflicts: m.conflicts, warnings: m.warnings };

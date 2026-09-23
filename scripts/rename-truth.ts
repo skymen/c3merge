@@ -10,7 +10,7 @@
 // uncertain the renamer declined (would be a flagged conflict in a merge)
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
-import { changes, readTypes, type ProjectContext } from "../src/context.ts";
+import { changes, readEvents, readTypes, type EventTable, type ProjectContext } from "../src/context.ts";
 import { applyRenames } from "../src/engine/renames.ts";
 import { renameExpression, tokenize, type RenameSet } from "../src/engine/expressions.ts";
 
@@ -57,6 +57,8 @@ function fields(kind: string, v: any): Map<string, string> {
         const id = `sid ${x.sid}`;
         if (typeof x.objectClass === "string") out.set(`${id} objectClass`, x.objectClass);
         if (typeof x.behaviorType === "string") out.set(`${id} behaviorType`, x.behaviorType);
+        if (typeof x.callFunction === "string") { out.set(`${id} callFunction`, x.callFunction); out.set(`${id} arguments`, JSON.stringify(x.parameters ?? [])); }
+        if (typeof x.customAction === "string") out.set(`${id} customAction`, x.customAction);
         const p = x.parameters;
         if (p && typeof p === "object") for (const [k, val] of Object.entries(p)) if (typeof val === "string") out.set(`${id} ${k}`, val);
       }
@@ -96,22 +98,39 @@ function listRenamed(a: string, b: string, set: RenameSet): boolean {
   return swapped;
 }
 
-const commits = git(["log", "--no-merges", "--format=%H", "--", `${prefix}objectTypes`, `${prefix}families`]).toString().trim().split("\n");
+// Event renames (variables, functions, parameters) between two event tables, for labels and
+// for classifying C3's changes.
+function eventChanges(P: EventTable, C: EventTable) {
+  const names: [string, string][] = [], labels: string[] = [], sigs = new Set<string>();
+  for (const [sid, v] of Object.entries(C.vars)) { const o = P.vars[sid]; if (o && o.name !== v.name) { names.push([o.name, v.name]); labels.push(`${o.name}→${v.name} (${o.scope === null ? "global" : "local"})`); } }
+  for (const [sid, f] of Object.entries(C.fns)) {
+    const o = P.fns[sid]; if (!o) continue;
+    if (o.name !== f.name) { names.push([o.name, f.name]); labels.push(`${o.name}→${f.name} (${f.kind})`); }
+    for (const p of f.params) { const q = o.params.find((x) => x.sid === p.sid); if (q && q.name !== p.name) { names.push([q.name, p.name]); labels.push(`${f.name}(${q.name}→${p.name})`); } }
+    if (o.params.map((p) => p.sid).join() !== f.params.map((p) => p.sid).join()) { sigs.add(f.name.toLowerCase()); labels.push(`${f.name} parameters ${o.params.length}→${f.params.length}`); }
+  }
+  return { names, labels, sigs };
+}
+
+const commits = git(["log", "--no-merges", "--format=%H", "--", `${prefix}objectTypes`, `${prefix}families`, `${prefix}eventSheets`]).toString().trim().split("\n");
 const totals = { match: 0, miss: 0, extra: 0, wrong: 0, uncertain: 0, unrelated: 0 };
 const problems: string[] = [];
 let seen = 0;
 for (const c of commits) {
   const [P, C] = [readTypes(repo, `${c}^`, root), readTypes(repo, c, root)];
   const ch = changes(P, C);
-  if (!Object.keys(ch.types).length && !ch.vars.length && !ch.behaviors.length) continue;
+  const [PE, CE] = [readEvents(repo, `${c}^`, root), readEvents(repo, c, root)];
+  const ech = eventChanges(PE, CE);
+  if (!Object.keys(ch.types).length && !ch.vars.length && !ch.behaviors.length && !ech.labels.length) continue;
   if (values.limit && ++seen > Number(values.limit)) break;
-  const ctx: ProjectContext = { base: P, ours: C, theirs: P };
-  const label = [...Object.entries(ch.types).map(([a, b]) => `${a}→${b}`), ...ch.vars.map((v) => `${C[v.owner].name}.${v.old}→${v.new}`), ...ch.behaviors.map((v) => `${C[v.owner].name}.${v.old}→${v.new} (behavior)`)].join(", ");
+  const ctx: ProjectContext = { base: P, ours: C, theirs: P, events: { base: PE, ours: CE, theirs: PE } };
+  const label = [...ech.labels, ...Object.entries(ch.types).map(([a, b]) => `${a}→${b}`), ...ch.vars.map((v) => `${C[v.owner].name}.${v.old}→${v.new}`), ...ch.behaviors.map((v) => `${C[v.owner].name}.${v.old}→${v.new} (behavior)`)].join(", ");
   const counts = { match: 0, miss: 0, extra: 0, wrong: 0, uncertain: 0, unrelated: 0 };
   const [before, after] = [readAll(`${c}^`, ["eventSheets", "layouts"]), readAll(c, ["eventSheets", "layouts"])];
   // The set as the renamer sees it, for classifying C3's changes.
   const set: RenameSet = { types: ch.types, members: [] };
   for (const [kind, list] of [["var", ch.vars], ["behavior", ch.behaviors]] as const) for (const m of list) set.members.push({ kind, old: m.old, new: m.new, owner: new Set(), selfClasses: new Set() });
+  for (const [o, n] of ech.names) set.members.push({ kind: "var", old: o, new: n, owner: new Set(), selfClasses: new Set() });
   for (const [file, p] of before) {
     const q = after.get(file);
     if (!q) continue;
@@ -122,7 +141,11 @@ for (const c of commits) {
     for (const [k, pv] of fp) {
       const qv = fq.get(k), rv = fr.get(k);
       if (qv === undefined) continue; // gone in the commit: not comparable
-      const c3Renamed = pv !== qv && (kind === "layout" ? listRenamed(pv, qv, set) : onlyRenamed(pv, qv, set));
+      const callKey = k.endsWith(" arguments") ? fp.get(k.replace(/ arguments$/, " callFunction")) : undefined;
+      const c3Renamed = pv !== qv && (kind === "layout" ? listRenamed(pv, qv, set)
+        : k.endsWith(" arguments") ? ech.sigs.has(String(fq.get(k.replace(/ arguments$/, " callFunction"))).toLowerCase()) || ech.sigs.has(String(callKey).toLowerCase())
+        : k.endsWith(" callFunction") || k.endsWith(" customAction") || k.endsWith(" variable") ? ech.names.some(([o, n]) => o === pv && n === qv)
+        : onlyRenamed(pv, qv, set));
       if (pv === qv) {
         if (rv !== pv) { counts.extra++; problems.push(`EXTRA ${c.slice(0, 8)} ${file} ${k}: ${JSON.stringify(pv)} → ${JSON.stringify(rv)}`); }
         continue;

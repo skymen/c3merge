@@ -26,7 +26,6 @@ packaging/release · `[docs]`
 
 ## Later
 
-- [core] Renames of event variables and functions: explored, design and 3 scope questions for skymen ([tasks/event-renames.md](tasks/event-renames.md))
 
 - [profiles] Script events that store their code as one string (`"script": "…\n…"`) should get the line merge too; key timeline tracks by what they animate ([tasks/profiles.md](tasks/profiles.md#later))
 - [check] Repair mode: `check --fix` for the classes C3 does *not* repair itself (dedupe sids, drop dangling references with a report)

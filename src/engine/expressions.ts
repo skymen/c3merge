@@ -61,7 +61,9 @@ export const print = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 // behavior, in every form an expression may use for it (its names, the member types of a
 // family); `selfClasses` are the objectClass values for which `Self` means that owner.
 export interface MemberRename { kind: "var" | "behavior"; old: string; new: string; owner: Set<string>; selfClasses: Set<string> }
-export interface RenameSet { types: Record<string, string>; members: MemberRename[] }
+// `vars`: event variables in scope for this expression (bare names), `functions`: function
+// renames (`Functions.name(...)`); both old → new.
+export interface RenameSet { types: Record<string, string>; members: MemberRename[]; vars?: Record<string, string>; functions?: Record<string, string> }
 
 export interface RenameResult { text: string; changed: boolean; uncertain: string | null }
 
@@ -82,9 +84,11 @@ export function renameExpression(expr: string, objectClass: string | undefined, 
   const lowerSet = (s: Set<string>) => new Set([...s].map((x) => x.toLowerCase()));
   const members = set.members.filter((m) => m.old.toLowerCase() !== m.new.toLowerCase())
     .map((m) => ({ ...m, oldL: m.old.toLowerCase(), ownerL: lowerSet(m.owner), selfL: lowerSet(m.selfClasses) }));
+  const byOld = (r: Record<string, string> | undefined) => new Map(Object.entries(r ?? {}).filter(([a, b]) => a.toLowerCase() !== b.toLowerCase()).map(([a, b]) => [a.toLowerCase(), b]));
+  const vars = byOld(set.vars), functions = byOld(set.functions);
   // Cheap exit: none of the names occur at all (outside or inside strings).
   const low = expr.toLowerCase();
-  if (![...types.keys(), ...members.map((m) => m.oldL)].some((n) => low.includes(n))) return same(null);
+  if (![...types.keys(), ...members.map((m) => m.oldL), ...vars.keys(), ...functions.keys()].some((n) => low.includes(n))) return same(null);
   const tokens = tokenize(expr);
   if (!tokens) return same("can't read the expression");
   const sig = tokens.map((t, i) => ({ t, i })).filter((x) => x.t.kind !== "space");
@@ -110,8 +114,19 @@ export function renameExpression(expr: string, objectClass: string | undefined, 
       if (c < 0) return same("unbalanced parentheses");
       next = c + 1;
     }
-    if (!(at(next)?.text === "." && at(next + 1)?.kind === "name")) continue; // a name on its own: never an object
+    if (!(at(next)?.text === "." && at(next + 1)?.kind === "name")) {
+      // A name on its own: never an object. Without parentheses, an event variable in scope
+      // (or a system expression, whose names variables can't take); with, a call.
+      const v = next === k + 1 ? vars.get(tok.text.toLowerCase()) : undefined;
+      if (v !== undefined) rewrite.set(sig[k].i, v);
+      continue;
+    }
     const head = tok.text.toLowerCase();
+    if (head === "functions") {
+      const f = functions.get(at(next + 1)!.text.toLowerCase());
+      if (f !== undefined) rewrite.set(sig[next + 1].i, f);
+      continue;
+    }
     const newHead = types.get(head);
     if (newHead !== undefined) rewrite.set(sig[k].i, newHead);
     const m1 = at(next + 1)!.text.toLowerCase(), afterM1 = at(next + 2)?.text;

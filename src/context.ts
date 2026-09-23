@@ -2,7 +2,9 @@
 // the file being merged (tasks/core-merge-engine.md "Renames need the whole project"):
 // - object types and families renamed on a side (same sid, new name);
 // - what an object type gained on a side, itself or through a family, which C3 then adds
-//   to every instance by itself (variables, behaviors, effects).
+//   to every instance by itself (variables, behaviors, effects);
+// - event variables (global, local with their scope), functions and custom actions, with
+//   their parameters, for their renames and signature changes.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -12,7 +14,60 @@ export interface Named { sid: number; name: string }
 export interface TypeInfo { kind: "objectType" | "family"; name: string; plugin: string; vars: Named[]; behaviors: Named[]; effects: string[]; members: string[] }
 // Object types and families by sid, at one commit.
 export type Table = Record<string, TypeInfo>;
-export interface ProjectContext { base: Table; ours: Table; theirs: Table }
+// Event variables and functions, by sid, at one commit (event sheets). `scope` is the sid of
+// the event whose children declare a local variable (null: a global, at the top of a sheet).
+export interface Param { sid: number; name: string; type: string; initialValue: string }
+export interface EventTable {
+  vars: Record<string, { name: string; scope: number | null }>;
+  fns: Record<string, { name: string; kind: "function" | "custom"; owner: string; params: Param[] }>;
+}
+export interface ProjectContext { base: Table; ours: Table; theirs: Table; events?: { base: EventTable; ours: EventTable; theirs: EventTable } }
+
+export function eventTable(sheets: unknown[]): EventTable {
+  const out: EventTable = { vars: {}, fns: {} };
+  const params = (l: unknown): Param[] => (Array.isArray(l) ? l.filter((p) => typeof p?.sid === "number").map((p) => ({ sid: p.sid, name: String(p.name), type: String(p.type), initialValue: String(p.initialValue ?? "") })) : []);
+  const walk = (list: unknown, scope: number | null) => {
+    if (!Array.isArray(list)) return;
+    for (const e of list) {
+      if (!e || typeof e !== "object") continue;
+      if (e.eventType === "variable" && typeof e.sid === "number") out.vars[e.sid] = { name: String(e.name), scope };
+      if (typeof e.functionName === "string" && typeof e.sid === "number") out.fns[e.sid] = { name: e.functionName, kind: "function", owner: "", params: params(e.functionParameters) };
+      if (e.eventType === "custom-ace-block" && typeof e.sid === "number") out.fns[e.sid] = { name: String(e.aceName), kind: "custom", owner: String(e.objectClass), params: params(e.functionParameters) };
+      walk(e.children, typeof e.sid === "number" ? e.sid : scope);
+    }
+  };
+  for (const s of sheets) walk((s as any)?.events, null);
+  return out;
+}
+
+export function readEvents(repo: string, rev: string, root: string): EventTable {
+  const dir = root === "." ? "eventSheets" : `${root}/eventSheets`;
+  const files = git(repo, ["ls-tree", "-r", "--name-only", rev, "--", dir]).toString("utf8").split("\n").filter((f) => f.endsWith(".json") && !f.endsWith(".uistate.json"));
+  if (!files.length) return eventTable([]);
+  const batch = git(repo, ["cat-file", "--batch"], files.map((f) => `${rev}:${f}`).join("\n") + "\n");
+  const sheets: unknown[] = [];
+  let pos = 0;
+  for (const _ of files) {
+    const nl = batch.indexOf(10, pos);
+    const header = batch.subarray(pos, nl).toString();
+    if (header.endsWith("missing")) { pos = nl + 1; continue; }
+    const size = Number(header.split(" ")[2]);
+    try { sheets.push(JSON.parse(batch.subarray(nl + 1, nl + 1 + size).toString("utf8"))); } catch { /* skip */ }
+    pos = nl + 1 + size + 1;
+  }
+  return eventTable(sheets);
+}
+
+export function readEventsFromDisk(root: string): EventTable {
+  const dir = path.join(root, "eventSheets");
+  if (!existsSync(dir)) return eventTable([]);
+  const sheets: unknown[] = [];
+  for (const e of readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    if (!e.isFile() || !e.name.endsWith(".json") || e.name.endsWith(".uistate.json")) continue;
+    try { sheets.push(JSON.parse(readFileSync(path.join(e.parentPath, e.name), "utf8"))); } catch { /* conflicted: skip */ }
+  }
+  return eventTable(sheets);
+}
 
 // What one side changed, derived from the tables.
 export interface Changes {
@@ -116,7 +171,10 @@ export function changes(base: Table, side: Table): Changes {
 }
 
 export function buildContext(repo: string, root: string, revs: { base: string; ours: string; theirs: string }): ProjectContext {
-  return { base: readTypes(repo, revs.base, root), ours: readTypes(repo, revs.ours, root), theirs: readTypes(repo, revs.theirs, root) };
+  return {
+    base: readTypes(repo, revs.base, root), ours: readTypes(repo, revs.ours, root), theirs: readTypes(repo, revs.theirs, root),
+    events: { base: readEvents(repo, revs.base, root), ours: readEvents(repo, revs.ours, root), theirs: readEvents(repo, revs.theirs, root) },
+  };
 }
 
 // ── inside the merge driver ───────────────────────────────────────────────────────────
@@ -139,7 +197,7 @@ export function driverContext(repoPath: string): ProjectContext | undefined {
     const root = projectRoot(repoPath, ours);
     if (root === null) return undefined;
     const key = `${base} ${ours} ${picked.sha} ${root}`;
-    const cache = path.join(gitDir, "c3merge", "context-v2.json");
+    const cache = path.join(gitDir, "c3merge", "context-v3.json");
     if (existsSync(cache)) {
       const c = JSON.parse(readFileSync(cache, "utf8"));
       if (c.key === key) return c.context;

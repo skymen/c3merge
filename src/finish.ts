@@ -8,8 +8,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { checkProject } from "./check/index.ts";
-import { readTypes, readTypesFromDisk } from "./context.ts";
-import { applyRenameSet, resultRenameSet } from "./engine/renames.ts";
+import { readEvents, readEventsFromDisk, readTypes, readTypesFromDisk } from "./context.ts";
+import { applyRenameSet, resultRenames } from "./engine/renames.ts";
 import { detectStyle, render } from "./engine/render.ts";
 import { profileFor } from "./profiles/index.ts";
 
@@ -46,12 +46,22 @@ export function finish(after: "merge" | "rebase" | "manual"): FinishReport[] {
 
 function finishProject(top: string, root: string, base: string): FinishReport {
   const dir = path.join(top, root);
-  const set = resultRenameSet(readTypes(top, base, root), readTypesFromDisk(dir));
+  const set = resultRenames(readTypes(top, base, root), readTypesFromDisk(dir), readEvents(top, base, root), readEventsFromDisk(dir));
+  const ev = set.events;
   const report: FinishReport = {
     project: root, fixed: [], unsure: [], conflicted: [], images: [],
-    renames: [...Object.entries(set.types).map(([a, b]) => `${a} → ${b}`), ...set.members.map((m) => `${[...m.owner][0]}.${m.old} → ${m.new}${m.kind === "behavior" ? " (behavior)" : ""}`)],
+    renames: [
+      ...Object.entries(set.objects.types).map(([a, b]) => `${a} → ${b}`),
+      ...set.objects.members.map((m) => `${[...m.owner][0]}.${m.old} → ${m.new}${m.kind === "behavior" ? " (behavior)" : ""}`),
+      ...Object.entries(ev.globals).map(([a, b]) => `${a} → ${b} (global variable)`),
+      ...ev.locals.map((l) => `${l.old} → ${l.new} (local variable)`),
+      ...ev.params.map((l) => `${l.old} → ${l.new} (parameter)`),
+      ...Object.entries(ev.functions).map(([a, b]) => `${a} → ${b} (function)`),
+      ...ev.customs.map((c) => `${c.owner}.${c.old} → ${c.new} (custom action)`),
+      ...ev.signatures.map((g) => `${g.name}(${g.params.map((p) => p.name).join(", ")}) (parameters)`),
+    ],
   };
-  if (report.renames.length) renameImages(dir, set.types, report);
+  if (report.renames.length) renameImages(dir, set.objects.types, report);
   if (report.renames.length) {
     for (const rel of c3Files(dir)) {
       const file = path.join(dir, rel);
