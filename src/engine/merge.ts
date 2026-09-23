@@ -2,11 +2,11 @@
 // certainly right; everything else becomes a Conflict (a value) or a Run (a stretch of
 // list elements) that render.ts writes out between conflict markers. Ambiguous order is
 // merged anyway and reported as a warning.
-import type { ProjectContext, SideChanges } from "../context.ts";
+import { changes, type Changes, type ProjectContext } from "../context.ts";
 import { profileFor, ruleFor, type Profile, type Rule } from "../profiles/index.ts";
 import { mergeLines } from "./lines.ts";
 import { reconcileMoves, type ForcedConflict } from "./moves.ts";
-import { applyRenames } from "./renames.ts";
+import { applyRenames, flagLeftovers } from "./renames.ts";
 import { detectStyle, render } from "./render.ts";
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
@@ -14,9 +14,11 @@ export const ABSENT: unique symbol = Symbol("absent");
 export type Maybe = Json | typeof ABSENT;
 
 // A value both sides changed differently. ABSENT = deleted (or never added) on that side.
-export class Conflict { constructor(readonly ours: Maybe, readonly theirs: Maybe) {} }
+// `labels` replace "ours"/"theirs" on the markers when the sides aren't the two branches
+// (an expression as merged vs the renamed guess).
+export class Conflict { constructor(readonly ours: Maybe, readonly theirs: Maybe, readonly labels?: [string, string]) {} }
 // A stretch of list elements the two sides disagree on.
-export class Run { constructor(readonly ours: Json[], readonly theirs: Json[]) {} }
+export class Run { constructor(readonly ours: Json[], readonly theirs: Json[], readonly labels?: [string, string]) {} }
 
 // `path` identifies the spot exactly (layers[sid=…]); `where` is for people (layers[Background]).
 export interface Issue { path: string; where: string; message: string }
@@ -39,9 +41,17 @@ export function mergeFile(repoPath: string, base: string | null, ours: string, t
   const profile = profileFor(repoPath);
   if (context) applyRenames(profile.kind, b, o, t, context);
   const forced = reconcileMoves(profile, b, o, t);
-  const m = new Merger(profile, context);
+  const sides = context && { ours: changes(context.base, context.ours), theirs: changes(context.base, context.theirs) };
+  const m = new Merger(profile, sides);
   const merged = m.merge(b, o, t, "", "", "");
   m.applyForced(merged, forced);
+  if (context) flagLeftovers(profile.kind, merged, context, (ace, key, guess, reason) => {
+    const where = `${ace.objectClass ?? "function"} ${ace.id ?? ace.callFunction ?? ""} (sid ${ace.sid}) parameter ${key}`;
+    m.flag(where, `may still use a name renamed on the other side (${reason}): check the guess in C3`);
+    const labels: [string, string] = ["as merged", "renamed (check)"];
+    const v = ace.parameters[key];
+    ace.parameters[key] = Array.isArray(ace.parameters) ? new Run([v], [guess], labels) : new Conflict(v, guess, labels);
+  });
   const result = { conflicts: m.conflicts, warnings: m.warnings };
   // Keep the exact bytes of a side when the merge is that side (formatting of non-C3 JSON).
   if (!m.conflicts.length) {
@@ -73,7 +83,9 @@ type ListRule = { id: string[]; also?: string[]; order: "ordered" | "set" };
 class Merger {
   conflicts: Issue[] = [];
   warnings: Issue[] = [];
-  constructor(private profile: Profile, private context?: ProjectContext) {}
+  constructor(private profile: Profile, private sides?: { ours: Changes; theirs: Changes }) {}
+
+  flag(where: string, message: string) { this.conflict(where, where, message); }
 
   // Moves that couldn't be settled (moves.ts): each side's copy becomes that side of a hunk.
   applyForced(v: unknown, forced: Map<object, ForcedConflict>) {
@@ -185,7 +197,7 @@ class Merger {
       } else if (inO || inT) {
         const [mine, side] = inO ? [O.get(id)!, "ours"] : [T.get(id)!, "theirs"];
         if (!inB) kept.set(id, mine); // added on one side
-        else if (!this.onlyAutomatic(B.get(id)!, mine, migrated(b, inO ? o : t), side === "ours" ? this.context?.ours : this.context?.theirs)) {
+        else if (!this.onlyAutomatic(B.get(id)!, mine, migrated(b, inO ? o : t), side === "ours" ? this.sides?.ours : this.sides?.theirs)) {
           this.conflict(elPath(id), elWhere(id), `deleted on ${side === "ours" ? "theirs" : "ours"}, changed on ${side}`);
           kept.set(id, inO ? new Run([mine], []) : new Run([], [mine]));
         } // else: deleted on the other side and untouched here → gone
@@ -248,7 +260,7 @@ class Merger {
   //   and tags);
   // - on an instance, what its object type (or a family) gained on that side: variables,
   //   behaviors, effects, and the template flags for those variables.
-  private onlyAutomatic(base: Json, mine: Json, newKeys: string[], side: SideChanges | undefined): boolean {
+  private onlyAutomatic(base: Json, mine: Json, newKeys: string[], side: Changes | undefined): boolean {
     if (eq(base, mine)) return true;
     if (!isObj(base) || !isObj(mine)) return false;
     const g = side && typeof mine.type === "string" && typeof mine.uid === "number" ? side.gained[mine.type] : undefined;

@@ -136,17 +136,34 @@ from the layout being merged. What the driver can see (tested, git 2.50):
   different parameters (1), a language list extended differently (1), layers/events
   deleted vs edited (5), an animation frame, a scene-graph folder item.
 
-### Instance variable renames
-**Status:** not handled (2026-09-23). Instances store values by variable name. Ours renames
-`myVar` → `speed` (C3 renames the key on every instance), theirs sets `myVar = 42` on one
-instance: conflict, taking ours loses the 42, taking theirs leaves an undeclared `myVar`
-that C3 refuses (lab row 14). Theirs adding a new instance with `myVar` merges cleanly and
-breaks the project. Fix: same as object type renames, from the variable's sid in the type or
-family file, but only for structured references (instance keys, template flags,
-`instance-variable` parameters with that `objectClass`). Expressions are never rewritten
-(skymen): C3 rewrote them on the renaming side, an expression edited on both sides is a
-conflict, and the other side's new or edited expressions still using `Type.old` (or
-`Self.old`, `Family.old`) are flagged as conflicts. Detection can err towards a false
-conflict; rewriting can't err safely. Test set: 17 variable renames in the Under The Red
-Sky history (e.g. `98622988` player: walkSpeed → groundSpeed), where C3's own rewrite is
-the reference.
+### Instance variable and behavior renames, expressions
+**Status:** implemented (2026-09-23). `context.ts` keeps each side's object types and families
+with their variables and behaviors by sid; a sid with a new name is a rename.
+- Structured references are rewritten on the base and the other side: instance variable
+  keys and template flags, instance behavior keys and template behavior entries,
+  `instance-variable` parameters and `behaviorType` on actions of that object (or a family
+  member, for family variables).
+- Expressions (`src/engine/expressions.ts`): an exact tokenizer (strings with `""`, numbers,
+  names like `3DShape`, C3's operators) and a resolver for `Object.x`, `Object(i).x`,
+  `Self.x` (from the action's `objectClass`), `Family.x` / `Member.x`, `Object.Behavior.x`.
+  It only rewrites when sure. Anything else is `uncertain`: unreadable expression,
+  unbalanced parentheses, `Self` outside an object's action, a name that differs only by
+  case (C3 matches names case-insensitively in expressions: `9afbe21d`), a variable followed
+  by `(`, an object's name on its own. Uncertain expressions are left as they are and, after
+  the merge, become a conflict: `<<<<<<< as merged` / `>>>>>>> renamed (check)`.
+- Not renamed: a variable or type the other side re-created under the old name (a different
+  sid), or one renamed differently on each side (the type's file conflicts).
+
+**Verification (2026-09-23):**
+- `test/expressions.test.ts`: tokenizer and rename rules, including every "must not touch"
+  and "must decline" case; 9 engine cases in `test/cases.ts` (value edits, new instances,
+  new events, behaviors, family variables, an unsure `Self`, a re-created variable).
+- `scripts/expression-corpus.ts`: all 29,886 expression parameters of the 49 projects
+  tokenize and print back byte for byte.
+- `scripts/rename-truth.ts <repo>`: every rename in the Under The Red Sky history (object
+  types, families, variables, behaviors), with C3's own rewrite as the reference: **1,690
+  fields renamed exactly as C3 did, 0 missed, 0 changed that C3 didn't**. 493 fields were
+  also edited by hand in the same commits and can't be compared exactly; in those, every
+  name the renamer produced is in C3's result except two that aren't errors (a condition
+  repointed by hand, `dcf3c86d`; `Secrets.UID` vs `secrets.UID`, same thing for C3).
+- Replay of the 103 real merges: 162 conflicts as before, no expression flagged.

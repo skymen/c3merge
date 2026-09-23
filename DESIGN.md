@@ -65,7 +65,10 @@ Generic keyed 3-way merge over JSON values, driven by a **profile** chosen from 
 (tasks/core-merge-engine.md "Project context"): the other side's object type renames are
 applied to references, and changes C3 makes by itself (variables a type gained, a release's
 new keys on every element) don't count as edits against a deletion. Float noise from the
-3D Object bug stays a conflict.
+3D Object bug stays a conflict. Renamed variables and behaviors are followed the same way.
+Expressions are rewritten only when the resolver in `expressions.ts` is sure; otherwise the
+expression stays as written and becomes a conflict next to the renamed guess (skymen: cancel
+the edit and flag it rather than risk a wrong rename).
 
 **(decided 2026-09-23, skymen)** Only C3's own files go through the structural merge.
 Files under `files/` and `scripts/` are left to git, except JSON, which gets git's merge when

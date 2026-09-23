@@ -23,8 +23,9 @@ export function render(v: unknown, style: Style): string {
     return text.split("\n").join(style.eol) + end;
   }
   // Conflicts are rendered expanded, even in a compact file: the file is getting fixed anyway.
+  const [lo, lt] = markers(v instanceof Conflict ? v.labels : undefined);
   const lines = v instanceof Conflict
-    ? [MARKER.ours, ...side(v.ours, style, 0), MARKER.sep, ...side(v.theirs, style, 0), MARKER.theirs]
+    ? [lo, ...side(v.ours, style, 0), MARKER.sep, ...side(v.theirs, style, 0), lt]
     : valueLines(v, style, 0, "", "");
   return lines.join(style.eol) + end;
 }
@@ -38,8 +39,10 @@ function hasConflict(v: unknown): boolean {
   return false;
 }
 
+const markers = (labels?: [string, string]) => (labels ? [`<<<<<<< ${labels[0]}`, `>>>>>>> ${labels[1]}`] : [MARKER.ours, MARKER.theirs]);
+
 interface Entry { key?: string; value: unknown }
-type Item = Entry | { ours: Entry[]; theirs: Entry[] };
+type Item = Entry | { ours: Entry[]; theirs: Entry[]; labels?: [string, string] };
 const isHunk = (i: Item): i is { ours: Entry[]; theirs: Entry[] } => "ours" in i;
 
 function valueLines(v: unknown, style: Style, depth: number, prefix: string, suffix: string): string[] {
@@ -52,15 +55,15 @@ function valueLines(v: unknown, style: Style, depth: number, prefix: string, suf
   const items: Item[] = [];
   const push = (i: Item) => {
     const last = items.at(-1);
-    if (last && isHunk(last) && isHunk(i)) { last.ours = last.ours.concat(i.ours); last.theirs = last.theirs.concat(i.theirs); }
+    if (last && isHunk(last) && isHunk(i) && String(last.labels) === String(i.labels)) { last.ours = last.ours.concat(i.ours); last.theirs = last.theirs.concat(i.theirs); }
     else items.push(i);
   };
   if (isArray) {
-    for (const e of v as unknown[]) push(e instanceof Run ? { ours: e.ours.map((value) => ({ value })), theirs: e.theirs.map((value) => ({ value })) } : { value: e });
+    for (const e of v as unknown[]) push(e instanceof Run ? { ours: e.ours.map((value) => ({ value })), theirs: e.theirs.map((value) => ({ value })), labels: e.labels } : { value: e });
   } else {
     for (const [key, e] of Object.entries(v as object)) {
       push(e instanceof Conflict
-        ? { ours: e.ours === ABSENT ? [] : [{ key, value: e.ours }], theirs: e.theirs === ABSENT ? [] : [{ key, value: e.theirs }] }
+        ? { ours: e.ours === ABSENT ? [] : [{ key, value: e.ours }], theirs: e.theirs === ABSENT ? [] : [{ key, value: e.theirs }], labels: e.labels }
         : { key, value: e });
     }
   }
@@ -79,7 +82,8 @@ function valueLines(v: unknown, style: Style, depth: number, prefix: string, suf
     const add = (lines: string[]) => { for (const l of lines) out.push(l); };
     if (!isHunk(item)) { add(entry(item, more)); return; }
     const sideLines = (es: Entry[]) => es.forEach((e, j) => add(entry(e, j < es.length - 1 || more)));
-    out.push(MARKER.ours); sideLines(item.ours); out.push(MARKER.sep); sideLines(item.theirs); out.push(MARKER.theirs);
+    const [lo, lt] = markers(item.labels);
+    out.push(lo); sideLines(item.ours); out.push(MARKER.sep); sideLines(item.theirs); out.push(lt);
   });
   out.push(`${pad}${isArray ? "]" : "}"}${suffix}`);
   return out;
@@ -90,9 +94,9 @@ export function takeSide(text: string, which: "ours" | "theirs"): string {
   const out: string[] = [];
   let state: "none" | "ours" | "theirs" = "none";
   for (const line of text.split(/\r?\n/)) {
-    if (line === MARKER.ours) state = "ours";
+    if (line.startsWith("<<<<<<< ")) state = "ours";
     else if (line === MARKER.sep && state !== "none") state = "theirs";
-    else if (line === MARKER.theirs && state !== "none") state = "none";
+    else if (line.startsWith(">>>>>>> ") && state !== "none") state = "none";
     else if (state === "none" || state === which) out.push(line);
   }
   return out.join("\n");

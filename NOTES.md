@@ -15,7 +15,6 @@ packaging/release · `[docs]`
 ## Now
 
 - [driver] Finish step when a merge ends, before anything is committed (skymen: open C3, commit when satisfied): replay renames in every file (git doesn't send one-sided files to the driver: `85c85d2a` MT2-2, Subhub-Trials1/2), leave the fixes uncommitted, run `check`. Hooks: `post-index-change` with `1` + `GITHEAD_*` for merges (clean or conflicted), `post-rewrite` for rebases; renames = sid kept, name changed between the common ancestor and the result ([tasks/git-driver.md](tasks/git-driver.md#finish-step))
-- [core] Instance variable renames (sid kept, name changed in the type/family file). Rewrite only structured references on the other side: instance keys, template flags, `instance-variable` parameters on that object. Never rewrite expressions (skymen 2026-09-23): C3 already renamed them on the renaming side, both sides editing one is a conflict, and the other side's new or edited expressions still naming `Type.old` are flagged as conflicts to fix by hand. Then behaviors and effects. 17 real renames in the Under The Red Sky history to test against ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#instance-variable-renames))
 - [docs] Artifact for skymen: every case where c3merge helps and exactly how it works (requested 2026-09-23)
 
 ## Normal
@@ -27,6 +26,8 @@ packaging/release · `[docs]`
 - [corpus] Golden tests: for every fixture triple, expected merged output + expected collision list; run in CI ([tasks/test-corpus.md](tasks/test-corpus.md#golden-tests))
 
 ## Later
+
+- [core] Other renames C3 propagates: global/local event variables, functions, layers (in parameters), layouts, animations, effects
 
 - [profiles] Script events that store their code as one string (`"script": "…\n…"`) should get the line merge too; key timeline tracks by what they animate ([tasks/profiles.md](tasks/profiles.md#later))
 - [check] Repair mode: `check --fix` for the classes C3 does *not* repair itself (dedupe sids, drop dangling references with a report)

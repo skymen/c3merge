@@ -8,22 +8,31 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export interface Gained { vars: string[]; behaviors: string[]; effects: string[] }
-export interface SideChanges { renames: Record<string, string>; gained: Record<string, Gained> }
-export interface ProjectContext { ours: SideChanges; theirs: SideChanges }
+export interface Named { sid: number; name: string }
+export interface TypeInfo { kind: "objectType" | "family"; name: string; vars: Named[]; behaviors: Named[]; effects: string[]; members: string[] }
+// Object types and families by sid, at one commit.
+export type Table = Record<string, TypeInfo>;
+export interface ProjectContext { base: Table; ours: Table; theirs: Table }
 
-interface TypeInfo { kind: "objectType" | "family"; name: string; vars: string[]; behaviors: string[]; effects: string[]; members: string[] }
-type Types = Map<number, TypeInfo>;
+// What one side changed, derived from the tables.
+export interface Changes {
+  types: Record<string, string>; // object types and families renamed: old name → new name
+  vars: MemberChange[];          // instance variables renamed (same sid, new name)
+  behaviors: MemberChange[];     // behaviors renamed
+  gained: Record<string, Gained>; // by object type name on this side
+}
+export interface MemberChange { owner: string; old: string; new: string } // owner: type/family sid
 
 const git = (repo: string, args: string[], input?: string) =>
   execFileSync("git", ["-C", repo, ...args], { input, maxBuffer: 1 << 30 });
-const names = (l: unknown) => (Array.isArray(l) ? l.map((x) => x?.name).filter((n) => typeof n === "string") : []);
+const named = (l: unknown): Named[] => (Array.isArray(l) ? l.filter((x) => typeof x?.name === "string" && typeof x?.sid === "number").map((x) => ({ sid: x.sid, name: x.name })) : []);
 
 // Object types and families of the project at `root` in commit `rev`.
-export function readTypes(repo: string, rev: string, root: string): Types {
+export function readTypes(repo: string, rev: string, root: string): Table {
   const dirs = ["objectTypes", "families"].map((d) => (root === "." ? d : `${root}/${d}`));
   const files = git(repo, ["ls-tree", "-r", "--name-only", rev, "--", ...dirs]).toString("utf8")
     .split("\n").filter((f) => f.endsWith(".json") && !f.endsWith(".uistate.json"));
-  const out: Types = new Map();
+  const out: Table = {};
   if (!files.length) return out;
   const batch = git(repo, ["cat-file", "--batch"], files.map((f) => `${rev}:${f}`).join("\n") + "\n");
   let pos = 0;
@@ -37,21 +46,28 @@ export function readTypes(repo: string, rev: string, root: string): Types {
     try {
       const v = JSON.parse(body);
       if (typeof v.sid !== "number" || typeof v.name !== "string") continue;
-      out.set(v.sid, {
+      out[v.sid] = {
         kind: `/${f}`.includes("/families/") ? "family" : "objectType", name: v.name,
-        vars: names(v.instanceVariables), behaviors: names(v.behaviorTypes), effects: names(v.effectTypes),
+        vars: named(v.instanceVariables), behaviors: named(v.behaviorTypes),
+        effects: Array.isArray(v.effectTypes) ? v.effectTypes.map((e: any) => e?.name).filter((n: unknown) => typeof n === "string") : [],
         members: Array.isArray(v.members) ? v.members : [],
-      });
+      };
     } catch { /* not JSON: ignore */ }
   }
   return out;
 }
 
-export function sideChanges(base: Types, side: Types): SideChanges {
-  const renames: Record<string, string> = {};
-  for (const [sid, s] of side) {
-    const b = base.get(sid);
-    if (b && b.kind === s.kind && b.name !== s.name) renames[b.name] = s.name;
+export function changes(base: Table, side: Table): Changes {
+  const types: Record<string, string> = {};
+  const vars: MemberChange[] = [], behaviors: MemberChange[] = [];
+  for (const [sid, s] of Object.entries(side)) {
+    const b = base[sid];
+    if (!b || b.kind !== s.kind) continue;
+    if (b.name !== s.name) types[b.name] = s.name;
+    for (const [list, out] of [["vars", vars], ["behaviors", behaviors]] as const) {
+      const before = new Map(b[list].map((x) => [x.sid, x.name]));
+      for (const x of s[list]) { const old = before.get(x.sid); if (old && old !== x.name) out.push({ owner: sid, old, new: x.name }); }
+    }
   }
   const gained: Record<string, Gained> = {};
   const minus = (a: string[], b: string[]) => a.filter((x) => !b.includes(x));
@@ -59,27 +75,27 @@ export function sideChanges(base: Types, side: Types): SideChanges {
     const cur = (gained[type] ??= { vars: [], behaviors: [], effects: [] });
     for (const k of ["vars", "behaviors", "effects"] as const) for (const x of g[k]) if (!cur[k].includes(x)) cur[k].push(x);
   };
-  const diff = (s: TypeInfo, b: TypeInfo): Gained => ({ vars: minus(s.vars, b.vars), behaviors: minus(s.behaviors, b.behaviors), effects: minus(s.effects, b.effects) });
-  const all = (s: TypeInfo): Gained => ({ vars: s.vars, behaviors: s.behaviors, effects: s.effects });
+  const names = (l: Named[]) => l.map((x) => x.name);
+  const diff = (s: TypeInfo, b: TypeInfo): Gained => ({ vars: minus(names(s.vars), names(b.vars)), behaviors: minus(names(s.behaviors), names(b.behaviors)), effects: minus(s.effects, b.effects) });
+  const all = (s: TypeInfo): Gained => ({ vars: names(s.vars), behaviors: names(s.behaviors), effects: s.effects });
   // Object types that existed at base, by their name on this side (new types have only new instances).
-  const oldTypes = new Set([...base.values()].filter((x) => x.kind === "objectType").map((x) => renames[x.name] ?? x.name));
-  for (const [sid, s] of side) {
-    const b = base.get(sid);
+  const oldTypes = new Set(Object.values(base).filter((x) => x.kind === "objectType").map((x) => types[x.name] ?? x.name));
+  for (const [sid, s] of Object.entries(side)) {
+    const b = base[sid];
     if (s.kind === "objectType") { if (b) add(s.name, diff(s, b)); continue; }
     // A family: members it already had get what it gained; members it gained get all of it.
-    const baseMembers = (b?.members ?? []).map((m) => renames[m] ?? m);
+    const baseMembers = (b?.members ?? []).map((m) => types[m] ?? m);
     for (const m of s.members) {
       if (!oldTypes.has(m)) continue;
       add(m, b && baseMembers.includes(m) ? diff(s, b) : all(s));
     }
   }
   for (const [k, g] of Object.entries(gained)) if (!g.vars.length && !g.behaviors.length && !g.effects.length) delete gained[k];
-  return { renames, gained };
+  return { types, vars, behaviors, gained };
 }
 
 export function buildContext(repo: string, root: string, revs: { base: string; ours: string; theirs: string }): ProjectContext {
-  const [b, o, t] = [revs.base, revs.ours, revs.theirs].map((r) => readTypes(repo, r, root));
-  return { ours: sideChanges(b, o), theirs: sideChanges(b, t) };
+  return { base: readTypes(repo, revs.base, root), ours: readTypes(repo, revs.ours, root), theirs: readTypes(repo, revs.theirs, root) };
 }
 
 // ── inside the merge driver ───────────────────────────────────────────────────────────
@@ -102,7 +118,7 @@ export function driverContext(repoPath: string): ProjectContext | undefined {
     const root = projectRoot(repoPath, ours);
     if (root === null) return undefined;
     const key = `${base} ${ours} ${picked.sha} ${root}`;
-    const cache = path.join(gitDir, "c3merge", "context.json");
+    const cache = path.join(gitDir, "c3merge", "context-v2.json");
     if (existsSync(cache)) {
       const c = JSON.parse(readFileSync(cache, "utf8"));
       if (c.key === key) return c.context;

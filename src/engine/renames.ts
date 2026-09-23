@@ -1,80 +1,181 @@
-// Apply object type and family renames made on one side to the other side (and to the
-// base), so references the other side added or kept follow the rename. Only references
-// C3 itself updates when renaming, and only where they can be found for certain:
-// instance types, event object classes, object parameters, `Name.` in expressions (never
-// inside strings), family members, project folders and containers.
-import type { ProjectContext } from "../context.ts";
+// Renames made on one side (object types, families, instance variables, behaviors: same sid,
+// new name) applied to the base and to the other side before merging, so what the other
+// side added or kept follows the rename. C3 already renamed everything on the renaming side.
+//
+// Structured references are rewritten: instance `type`, variable keys and template flags,
+// behavior keys, event `objectClass` / `behaviorType` / `instance-variable`, parameters naming
+// the object, family members, project folders and containers. Expressions go through
+// expressions.ts and are only rewritten when it is sure; after the merge, any expression
+// that may still use a renamed-away name becomes a conflict (flagLeftovers).
+import { changes, type ProjectContext, type Table } from "../context.ts";
+import { renameExpression, tokenize, type MemberRename, type RenameSet } from "./expressions.ts";
 
-type Map_ = Record<string, string>;
+// Parameters holding a variable or timeline name, never an expression or an object.
+const NAMES_ONLY = new Set(["instance-variable", "variable", "timeline"]);
 
 export function applyRenames(kind: string, b: unknown, o: unknown, t: unknown, ctx: ProjectContext) {
-  const ours = { ...ctx.ours.renames }, theirs = { ...ctx.theirs.renames };
-  // Renamed differently on each side: leave it to the conflict in the object type's file.
-  for (const k of Object.keys(ours)) if (k in theirs && theirs[k] !== ours[k]) { delete ours[k]; delete theirs[k]; }
-  rename(kind, b, { ...ours, ...theirs });
-  rename(kind, o, theirs);
-  rename(kind, t, ours);
+  const fromOurs = renameSet(ctx, "ours"), fromTheirs = renameSet(ctx, "theirs");
+  apply(kind, b, merge(fromOurs, fromTheirs));
+  apply(kind, o, fromTheirs);
+  apply(kind, t, fromOurs);
 }
 
-// Parameters holding a variable or timeline name, which can equal an object type's name.
-const NOT_OBJECTS = new Set(["instance-variable", "variable", "timeline"]);
-
-function rename(kind: string, v: unknown, map: Map_) {
-  if (!Object.keys(map).length || !v || typeof v !== "object") return;
-  const swap = (x: unknown) => (typeof x === "string" && x in map ? map[x] : x);
-  const walk = (x: any, key: string) => {
-    if (Array.isArray(x)) {
-      if (kind === "layout" && (key === "instances" || key === "nonworld-instances")) {
-        for (const i of x) if (i && typeof i.type === "string") i.type = swap(i.type);
-      }
-      x.forEach((e) => walk(e, ""));
-      return;
+// After merging: expressions in the result that may still use a renamed-away name. Sure
+// cases are fixed; the others become a conflict between the expression as merged and a
+// best guess, for a person to check in C3.
+export function flagLeftovers(kind: string, merged: unknown, ctx: ProjectContext, onConflict: (ace: any, key: string, guess: string, reason: string) => void) {
+  if (kind !== "eventSheet") return;
+  const set = merge(renameSet(ctx, "ours"), renameSet(ctx, "theirs"));
+  if (!Object.keys(set.types).length && !set.members.length) return;
+  forEachAce(merged, (ace) => {
+    const params = ace.parameters;
+    if (!params || typeof params !== "object") return;
+    for (const key of Object.keys(params)) {
+      const v = (params as any)[key];
+      if (typeof v !== "string" || NAMES_ONLY.has(key) || v in set.types) continue;
+      const r = renameExpression(v, ace.objectClass, set);
+      if (r.changed) (params as any)[key] = r.text;
+      else if (r.uncertain) onConflict(ace, key, guess(v, set), r.uncertain);
     }
-    if (!x || typeof x !== "object") return;
-    if (kind === "eventSheet") {
-      if (typeof x.objectClass === "string") x.objectClass = swap(x.objectClass);
-      if (Array.isArray(x.parameters)) x.parameters = x.parameters.map((p: unknown) => (typeof p === "string" ? renameInExpression(p, map) : p));
-      else if (x.parameters && typeof x.parameters === "object") {
-        for (const [k, p] of Object.entries(x.parameters)) {
+  });
+}
+
+// ── which renames, as seen from the other side ───────────────────────────────────────
+
+function renameSet(ctx: ProjectContext, renamer: "ours" | "theirs"): RenameSet {
+  const B = ctx.base, R = ctx[renamer], O = ctx[renamer === "ours" ? "theirs" : "ours"];
+  const chR = changes(B, R), chO = changes(B, O);
+  const sidNamed = (tbl: Table, name: string) => Object.entries(tbl).filter(([, x]) => x.name === name).map(([s]) => s);
+  const types: Record<string, string> = {};
+  for (const [old, now] of Object.entries(chR.types)) {
+    const sid = sidNamed(B, old)[0];
+    if (chO.types[old] && chO.types[old] !== now) continue; // renamed differently on each side: the type's file conflicts
+    if (sidNamed(O, old).some((s) => s !== sid)) continue;  // the other side made a new type with the old name
+    types[old] = now;
+  }
+  // Every name an owner (type or family) goes by in any version, plus a family's member types.
+  const names = (sid: string) => {
+    const out = new Set<string>();
+    for (const tbl of [B, R, O]) {
+      const x = tbl[sid];
+      if (!x) continue;
+      out.add(x.name);
+      if (x.kind === "family") for (const m of x.members) { out.add(m); if (types[m]) out.add(types[m]); }
+    }
+    return out;
+  };
+  const members: MemberRename[] = [];
+  for (const [kind, list] of [["var", chR.vars], ["behavior", chR.behaviors]] as const) {
+    const field = kind === "var" ? "vars" : "behaviors";
+    for (const c of list) {
+      const renamedSid = B[c.owner]?.[field].find((x) => x.name === c.old)?.sid;
+      const other = O[c.owner]?.[field] ?? [];
+      if (other.some((x) => x.name === c.old && x.sid !== renamedSid)) continue; // a new one with the old name
+      if (other.some((x) => x.sid === renamedSid && x.name !== c.old && x.name !== c.new)) continue; // renamed differently
+      const owner = names(c.owner);
+      members.push({ kind, old: c.old, new: c.new, owner, selfClasses: owner });
+    }
+  }
+  return { types, members };
+}
+
+const merge = (a: RenameSet, b: RenameSet): RenameSet => ({ types: { ...a.types, ...b.types }, members: [...a.members, ...b.members] });
+
+// ── applying a set to one version ─────────────────────────────────────────────────────
+
+function apply(kind: string, v: unknown, set: RenameSet) {
+  if (!v || typeof v !== "object" || (!Object.keys(set.types).length && !set.members.length)) return;
+  const type = (x: unknown) => (typeof x === "string" && x in set.types ? set.types[x] : x);
+  const vars = set.members.filter((m) => m.kind === "var"), behs = set.members.filter((m) => m.kind === "behavior");
+  const ownedBy = (m: MemberRename, cls: unknown) => typeof cls === "string" && (m.owner.has(cls) || m.owner.has(String(type(cls))));
+
+  if (kind === "layout") {
+    forEachInstance(v, (i) => {
+      for (const m of vars) if (ownedBy(m, i.type)) {
+        renameKey(i.instanceVariables, m.old, m.new);
+        templateState(i, "instance-variable", (part) => part.state?.forEach((s: any) => { if (s?.iv === m.old) s.iv = m.new; }));
+      }
+      for (const m of behs) if (ownedBy(m, i.type)) {
+        renameKey(i.behaviors, m.old, m.new);
+        templateState(i, "behavior", (part) => { if (part.key === m.old) part.key = m.new; });
+      }
+      if (typeof i.type === "string") i.type = type(i.type);
+    });
+  } else if (kind === "eventSheet") {
+    forEachAce(v, (ace) => {
+      const cls = ace.objectClass;
+      const params = ace.parameters;
+      if (params && typeof params === "object") {
+        for (const key of Object.keys(params)) {
+          const p = (params as any)[key];
           if (typeof p !== "string") continue;
-          x.parameters[k] = p in map ? (NOT_OBJECTS.has(k) ? p : map[p]) : renameInExpression(p, map);
+          if (key === "instance-variable") { for (const m of vars) if (p === m.old && ownedBy(m, cls)) (params as any)[key] = m.new; continue; }
+          if (NAMES_ONLY.has(key)) continue;
+          if (p in set.types) { (params as any)[key] = set.types[p]; continue; } // a parameter naming the object
+          const r = renameExpression(p, typeof cls === "string" ? cls : undefined, set);
+          if (r.changed) (params as any)[key] = r.text; // sure: rewrite; unsure: leave, flagged after the merge
         }
       }
-    }
-    for (const [k, e] of Object.entries(x)) walk(e, k);
-  };
-  if (kind === "objectType" && Array.isArray((v as any).members)) (v as any).members = (v as any).members.map(swap);
-  if (kind === "project") {
-    const folder = (f: any) => { if (!f) return; if (Array.isArray(f.items)) f.items = f.items.map(swap); (f.subfolders ?? []).forEach(folder); };
-    folder((v as any).objectTypes);
-    folder((v as any).families);
-    for (const c of (v as any).containers ?? []) if (Array.isArray(c.members)) c.members = c.members.map(swap);
-    return;
+      if (typeof ace.behaviorType === "string") for (const m of behs) if (ace.behaviorType === m.old && ownedBy(m, cls)) ace.behaviorType = m.new;
+      if (typeof cls === "string") ace.objectClass = type(cls);
+    });
+  } else if (kind === "objectType") {
+    const f = v as any;
+    if (Array.isArray(f.members)) f.members = f.members.map(type);
+  } else if (kind === "project") {
+    const p = v as any;
+    const folder = (f: any) => { if (!f) return; if (Array.isArray(f.items)) f.items = f.items.map(type); (f.subfolders ?? []).forEach(folder); };
+    folder(p.objectTypes);
+    folder(p.families);
+    for (const c of p.containers ?? []) if (Array.isArray(c.members)) c.members = c.members.map(type);
   }
+}
+
+// Rename a key in place, keeping the key order.
+function renameKey(o: unknown, from: string, to: string) {
+  if (!o || typeof o !== "object" || !(from in o) || to in o) return;
+  const entries = Object.entries(o).map(([k, x]) => [k === from ? to : k, x] as const);
+  for (const k of Object.keys(o)) delete (o as any)[k];
+  Object.assign(o, Object.fromEntries(entries));
+}
+
+function templateState(instance: any, id: string, fn: (part: any) => void) {
+  for (const comp of instance?.template?.components ?? []) if (comp?.id === id) for (const part of comp.component ?? []) fn(part);
+}
+
+function forEachInstance(v: unknown, fn: (i: any) => void) {
+  const walk = (x: any, key: string) => {
+    if (Array.isArray(x)) {
+      if (key === "instances" || key === "nonworld-instances") x.forEach((i) => { if (i && typeof i === "object") fn(i); });
+      x.forEach((e) => walk(e, ""));
+    } else if (x && typeof x === "object" && x.constructor === Object) for (const [k, e] of Object.entries(x)) walk(e, k);
+  };
   walk(v, "");
 }
 
-// `Old.X` → `New.X` in an expression, skipping string literals ("..." with "" escapes).
-export function renameInExpression(expr: string, map: Map_): string {
-  let out = "";
-  for (let i = 0; i < expr.length;) {
-    if (expr[i] === '"') {
-      let j = i + 1;
-      while (j < expr.length && !(expr[j] === '"' && expr[j + 1] !== '"')) j += expr[j] === '"' ? 2 : 1;
-      out += expr.slice(i, j + 1);
-      i = j + 1;
-      continue;
+// Actions and conditions (and function calls): objects with an objectClass or parameters.
+// Plain objects only: conflict markers (Conflict/Run) aren't walked into.
+function forEachAce(v: unknown, fn: (ace: any) => void) {
+  const walk = (x: any) => {
+    if (Array.isArray(x)) x.forEach(walk);
+    else if (x && typeof x === "object" && x.constructor === Object) {
+      if ("objectClass" in x || "callFunction" in x || "parameters" in x) fn(x);
+      Object.values(x).forEach(walk);
     }
-    const m = /^[A-Za-z0-9_]+/.exec(expr.slice(i));
-    if (m) {
-      const name = m[0];
-      const dotAfter = /^\s*\./.test(expr.slice(i + name.length));
-      const dotBefore = /\.\s*$/.test(out);
-      out += name in map && dotAfter && !dotBefore ? map[name] : name;
-      i += name.length;
-      continue;
-    }
-    out += expr[i++];
-  }
-  return out;
+  };
+  walk(v);
 }
+
+// A best guess for an expression we couldn't be sure about, shown next to it in the
+// conflict: every name that spells a renamed one, swapped (strings left alone).
+function guess(expr: string, set: RenameSet): string {
+  const tokens = tokenize(expr);
+  if (!tokens) return expr;
+  const member = new Map(set.members.map((m) => [m.old, m.new]));
+  return tokens.map((t, i) => {
+    if (t.kind !== "name") return t.text;
+    const afterDot = tokens.slice(0, i).filter((x) => x.kind !== "space").at(-1)?.text === ".";
+    return afterDot ? member.get(t.text) ?? t.text : set.types[t.text] ?? t.text;
+  }).join("");
+}
+

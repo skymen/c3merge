@@ -9,7 +9,7 @@
 // Rule (DESIGN.md "Engine"): only merge what is certainly right, anything else is a conflict.
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { ProjectContext } from "../src/context.ts";
+import type { ProjectContext, Table } from "../src/context.ts";
 
 export type Edit = (v: any) => void;
 export interface Case {
@@ -75,9 +75,27 @@ const layer = (v: any, sid: number) => v.layers.find((l: any) => l.sid === sid);
 const moveToLayer = (uid: number, sid: number): Edit => (v) => {
   const i = inst(v, uid); delInst(uid)(v); layer(v, sid).instances.push(i);
 };
-const noChanges = { renames: {}, gained: {} };
-const ctx = (ours: Partial<ProjectContext["ours"]>, theirs: Partial<ProjectContext["theirs"]>): ProjectContext =>
-  ({ ours: { ...noChanges, ...ours }, theirs: { ...noChanges, ...theirs } });
+// Object types and families as the project context sees them (context.ts), per version.
+interface T { sid: number; name: string; family?: string[]; vars?: [number, string][]; behaviors?: [number, string][] }
+const table = (...ts: T[]): Table => Object.fromEntries(ts.map((t) => [t.sid, {
+  kind: t.family ? "family" : "objectType", name: t.name, members: t.family ?? [], effects: [],
+  vars: (t.vars ?? []).map(([sid, name]) => ({ sid, name })), behaviors: (t.behaviors ?? []).map(([sid, name]) => ({ sid, name })),
+}]));
+const ctx = (base: T[], ours: T[], theirs: T[]): ProjectContext => ({ base: table(...base), ours: table(...ours), theirs: table(...theirs) });
+const SPRITE_T: T = { sid: 1, name: "Sprite", vars: [[11, "myVar"], [12, "myVarToo"], [13, "myBool"]], behaviors: [[21, "Bullet"]] };
+const TB_T: T = { sid: 2, name: "TiledBackground" };
+const FAM_T: T = { sid: 3, name: "Family1", family: ["Sprite"], vars: [[31, "fv"]] };
+const with_ = (t: T, change: Partial<T>): T => ({ ...t, ...change });
+const SPRITE_RENAMED_VAR = with_(SPRITE_T, { vars: [[11, "speed"], [12, "myVarToo"], [13, "myBool"]] });
+const SPRITE_RENAMED_BEH = with_(SPRITE_T, { behaviors: [[21, "Mover"]] });
+// What C3 does on the renaming side: every Sprite instance's key.
+const renameVarOnInstances = (v: any) => {
+  for (const l of v.layers) for (const i of l.instances) if (i.type === "Sprite") {
+    i.instanceVariables = Object.fromEntries(Object.entries(i.instanceVariables).map(([k, x]) => [k === "myVar" ? "speed" : k, x]));
+  }
+};
+const addAction = (a: object): Edit => (v) => { block(v).actions.push(a); };
+const touchSheet: Edit = (v) => { block(v).actions[0].parameters.shape = "prism"; }; // so both sides changed the file
 const renameSprite = (v: any) => { for (const l of v.layers) for (const i of l.instances) if (i.type === "Sprite") i.type = "Hero"; };
 const L1_LAYER = layerPath(L1);
 
@@ -245,13 +263,13 @@ export const CASES: Case[] = [
   {
     // Real merge 85c85d2a: theirs renamed TiledShapeDark, ours added instances of it.
     name: "object type renamed on one side, new instances of it on the other",
-    file: L1, context: ctx({}, { renames: { Sprite: "Hero" } }),
+    file: L1, context: ctx([SPRITE_T], [SPRITE_T], [with_(SPRITE_T, { name: "Hero" })]),
     ours: addInst(50, "end"), theirs: renameSprite,
     merged: both(renameSprite, addInst(50, "end"), (v) => { inst(v, 50).type = "Hero"; }),
   },
   {
     name: "object type renamed on one side, new events using it on the other",
-    file: ES1, context: ctx({}, { renames: { Sprite: "Hero" } }),
+    file: ES1, context: ctx([SPRITE_T], [SPRITE_T], [with_(SPRITE_T, { name: "Hero" })]),
     ours: (v) => { block(v).actions.push(usesSprite("Sprite")); },
     theirs: (v) => { block(v).actions[2].objectClass = "Hero"; },
     merged: (v) => { block(v).actions[2].objectClass = "Hero"; block(v).actions.push(usesSprite("Hero")); },
@@ -260,7 +278,7 @@ export const CASES: Case[] = [
     // Real merges: C3 fills in a variable the type gained on one side; the other side
     // deleted the instance. Only an automatic change: the deletion wins.
     name: "deleted on one side, only given its type's new variable on the other",
-    file: L1, context: ctx({}, { gained: { TiledBackground: { vars: ["hp"], behaviors: [], effects: [] } } }),
+    file: L1, context: ctx([TB_T], [TB_T], [with_(TB_T, { vars: [[41, "hp"]] })]),
     ours: delInst(3), theirs: (v) => { inst(v, 3).instanceVariables = { hp: 0 }; },
     merged: delInst(3),
   },
@@ -274,10 +292,68 @@ export const CASES: Case[] = [
   },
   {
     name: "deleted on one side, new variable and a real edit on the other",
-    file: L1, context: ctx({}, { gained: { TiledBackground: { vars: ["hp"], behaviors: [], effects: [] } } }),
+    file: L1, context: ctx([TB_T], [TB_T], [with_(TB_T, { vars: [[41, "hp"]] })]),
     ours: delInst(3), theirs: (v) => { inst(v, 3).instanceVariables = { hp: 0 }; inst(v, 3).world.x = 1; },
     conflicts: [`${L1_LAYER}.instances[uid=3]`],
     takeOurs: delInst(3), takeTheirs: (v) => { inst(v, 3).instanceVariables = { hp: 0 }; inst(v, 3).world.x = 1; },
+  },
+
+  // ── renamed variables and behaviors (context + expressions) ────────────────────────
+  {
+    name: "instance variable renamed on one side, its value edited on the other",
+    file: L1, context: ctx([SPRITE_T], [SPRITE_RENAMED_VAR], [SPRITE_T]),
+    ours: renameVarOnInstances, theirs: (v) => { inst(v, 2).instanceVariables.myVar = 42; },
+    merged: both(renameVarOnInstances, (v) => { inst(v, 2).instanceVariables.speed = 42; }),
+  },
+  {
+    name: "instance variable renamed on one side, a new instance with the old name on the other",
+    file: L1, context: ctx([SPRITE_T], [SPRITE_RENAMED_VAR], [SPRITE_T]),
+    ours: renameVarOnInstances, theirs: (v) => { addInst(50, "end")(v); inst(v, 50).instanceVariables.myVar = 7; },
+    merged: both(addInst(50, "end"), (v) => { inst(v, 50).instanceVariables.myVar = 7; }, renameVarOnInstances),
+  },
+  {
+    name: "instance variable renamed on one side, new events using it on the other",
+    file: ES1, context: ctx([SPRITE_T], [SPRITE_RENAMED_VAR], [SPRITE_T]),
+    ours: touchSheet,
+    theirs: addAction({ id: "set-instvar-value", objectClass: "Sprite", sid: 901, parameters: { "instance-variable": "myVar", value: "Self.myVar + Sprite(0).myVar + Other.myVar", text: '"Sprite.myVar"' } }),
+    merged: both(touchSheet, addAction({ id: "set-instvar-value", objectClass: "Sprite", sid: 901, parameters: { "instance-variable": "speed", value: "Self.speed + Sprite(0).speed + Other.myVar", text: '"Sprite.myVar"' } })),
+  },
+  {
+    // `Self` in a function call: no object to say what it is. Left as is and flagged, with
+    // the renamed version next to it.
+    name: "instance variable renamed, an expression we can't be sure about on the other side",
+    file: ES1, context: ctx([SPRITE_T], [SPRITE_RENAMED_VAR], [SPRITE_T]),
+    ours: touchSheet, theirs: addAction({ callFunction: "doIt", sid: 902, parameters: ["Self.myVar"] }),
+    conflicts: ["function doIt (sid 902) parameter 0"],
+    takeOurs: both(touchSheet, addAction({ callFunction: "doIt", sid: 902, parameters: ["Self.myVar"] })),
+    takeTheirs: both(touchSheet, addAction({ callFunction: "doIt", sid: 902, parameters: ["Self.speed"] })),
+  },
+  {
+    name: "the other side made a new variable with the old name: left alone",
+    file: ES1, context: ctx([SPRITE_T], [SPRITE_RENAMED_VAR], [with_(SPRITE_T, { vars: [[99, "myVar"], [12, "myVarToo"], [13, "myBool"]] })]),
+    ours: touchSheet, theirs: addAction({ id: "x", objectClass: "Sprite", sid: 904, parameters: { value: "Sprite.myVar" } }),
+    merged: both(touchSheet, addAction({ id: "x", objectClass: "Sprite", sid: 904, parameters: { value: "Sprite.myVar" } })),
+  },
+  {
+    name: "behavior renamed on one side, its properties edited on the other",
+    file: L1, base: (v) => { inst(v, 2).behaviors = { Bullet: { properties: { speed: 1 } } }; },
+    context: ctx([SPRITE_T], [SPRITE_RENAMED_BEH], [SPRITE_T]),
+    ours: (v) => { inst(v, 2).behaviors = { Mover: { properties: { speed: 1 } } }; },
+    theirs: (v) => { inst(v, 2).behaviors.Bullet.properties.speed = 5; },
+    merged: (v) => { inst(v, 2).behaviors = { Mover: { properties: { speed: 5 } } }; },
+  },
+  {
+    name: "behavior renamed on one side, new events using it on the other",
+    file: ES1, context: ctx([SPRITE_T], [SPRITE_RENAMED_BEH], [SPRITE_T]),
+    ours: touchSheet,
+    theirs: addAction({ id: "set-speed", objectClass: "Sprite", behaviorType: "Bullet", sid: 903, parameters: { speed: "Sprite.Bullet.Speed * 2" } }),
+    merged: both(touchSheet, addAction({ id: "set-speed", objectClass: "Sprite", behaviorType: "Mover", sid: 903, parameters: { speed: "Sprite.Mover.Speed * 2" } })),
+  },
+  {
+    name: "family variable renamed on one side, used through the family and a member on the other",
+    file: ES1, context: ctx([SPRITE_T, FAM_T], [SPRITE_T, with_(FAM_T, { vars: [[31, "fvar"]] })], [SPRITE_T, FAM_T]),
+    ours: touchSheet, theirs: addAction({ id: "x", objectClass: "Sprite", sid: 905, parameters: { value: "Sprite.fv + Family1.fv + Self.fv" } }),
+    merged: both(touchSheet, addAction({ id: "x", objectClass: "Sprite", sid: 905, parameters: { value: "Sprite.fvar + Family1.fvar + Self.fvar" } })),
   },
 
   // ── event sheets (execution order) ──────────────────────────────────────────────────
