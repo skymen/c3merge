@@ -78,6 +78,7 @@ const addEvent = (sid: number, at: number | "end"): Edit => (v) => { v.events.sp
 const block = (v: any) => v.events[2];
 const BLOCK = `events[sid=928488326739039]`;
 
+const scriptAction = (script: string[]) => ({ type: "script", script, sid: 555 });
 const ivar = (name: string, sid: number) => ({ name, type: "number", initialValue: 0, desc: "", show: true, sid });
 const addon = (id: string, version = "1.0.0.0") => ({ type: "plugin", id, name: id, author: "someone", bundled: true, version });
 
@@ -221,6 +222,25 @@ export const CASES: Case[] = [
     takeTheirs: (v) => { block(v).conditions[0] = { id: "every-tick", objectClass: "System", sid: 2 }; },
   },
 
+  {
+    name: "script action: different lines edited",
+    file: ES1,
+    base: (v) => { block(v).actions.push(scriptAction(["const a = 1;", "const b = 2;", "const c = 3;"])); },
+    ours: (v) => { block(v).actions[3].script[0] = "const a = 10;"; },
+    theirs: (v) => { block(v).actions[3].script[2] = "const c = 30;"; },
+    merged: (v) => { block(v).actions[3].script[0] = "const a = 10;"; block(v).actions[3].script[2] = "const c = 30;"; },
+  },
+  {
+    name: "script action: the same line edited differently",
+    file: ES1,
+    base: (v) => { block(v).actions.push(scriptAction(["const a = 1;", "const b = 2;"])); },
+    ours: (v) => { block(v).actions[3].script[1] = "const b = 20;"; },
+    theirs: (v) => { block(v).actions[3].script[1] = "const b = 200;"; },
+    conflicts: [`${BLOCK}.actions[sid=555].script`],
+    takeOurs: (v) => { block(v).actions[3].script[1] = "const b = 20;"; },
+    takeTheirs: (v) => { block(v).actions[3].script[1] = "const b = 200;"; },
+  },
+
   // ── c3proj: unordered lists merge as sets ───────────────────────────────────────────
   {
     // The most common real conflict: two branches create objects, git fails on the list.
@@ -246,14 +266,16 @@ export const CASES: Case[] = [
       v.layouts.items.push("Menu", "Credits");
       v.layouts.subfolders.push({ items: ["Level 1"], subfolders: [], name: "Levels" }, { items: ["Boss"], subfolders: [], name: "Bosses" });
     },
+    // Layouts keep their project-bar order (checked in the editor), so it's ambiguous.
+    warnings: ["layouts.items", "layouts.subfolders"],
   },
   {
     name: "the same subfolder gets different items on each side",
     file: PROJ,
-    base: (v) => { v.layouts.subfolders.push({ items: [], subfolders: [], name: "Levels" }); },
-    ours: (v) => { v.layouts.subfolders[0].items.push("Level 1"); },
-    theirs: (v) => { v.layouts.subfolders[0].items.push("Level 2"); },
-    merged: (v) => { v.layouts.subfolders[0].items.push("Level 1", "Level 2"); },
+    base: (v) => { v.objectTypes.subfolders.push({ items: [], subfolders: [], name: "Enemies" }); },
+    ours: (v) => { v.objectTypes.subfolders[0].items.push("Bat"); },
+    theirs: (v) => { v.objectTypes.subfolders[0].items.push("Rat"); },
+    merged: (v) => { v.objectTypes.subfolders[0].items.push("Bat", "Rat"); },
   },
   {
     name: "addons added on both sides",

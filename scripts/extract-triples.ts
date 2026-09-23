@@ -52,10 +52,10 @@ for (const m of merges) {
     await mkdir(dir, { recursive: true });
     const sides = { base: show(base, f), ours: show(p1, f), theirs: show(p2, f), actual: show(m, f) };
     for (const [k, v] of Object.entries(sides)) if (v !== null) await writeFile(path.join(dir, `${k}.json`), v);
-    // What git's line merge does with it: exit code = number of conflict hunks.
+    // What git's line merge does with it (histogram, like `git merge`): exit code = number of conflict hunks.
     let gitConflicts: number | null = null;
     if (sides.base !== null && sides.ours !== null && sides.theirs !== null) {
-      const r = spawnSync("git", ["merge-file", "-p", ...["ours", "base", "theirs"].map((k) => path.join(dir, `${k}.json`))], { maxBuffer: 1 << 30 });
+      const r = spawnSync("git", ["merge-file", "-p", "--diff-algorithm=histogram", ...["ours", "base", "theirs"].map((k) => path.join(dir, `${k}.json`))], { maxBuffer: 1 << 30 });
       gitConflicts = r.status;
     }
     files.push({ path: rel(f), present: Object.fromEntries(Object.entries(sides).map(([k, v]) => [k, v !== null])), gitConflicts });
