@@ -101,6 +101,11 @@ without a code change. No logic keyed on release numbers or on the editor's erro
 Profiles have a fallback for unknown keys and file kinds, and validator severities are data
 from the lab (`reports/lab-matrix.json`), refreshed by re-running it on new releases.
 
+**(decided 2026-09-23)** No tool here ever saves a project with an older release than it
+was saved with, or lowers `savedWithRelease` to make an older editor accept it. Going back
+a release can silently lose data (r495 → r449 turned 3D `depth` into the default
+`z-height` and dropped layer `sampling`). It stays a manual decision for people.
+
 ## Non-goals
 
 - Merging binary assets (PNG, audio, fonts). Git handles those as usual.

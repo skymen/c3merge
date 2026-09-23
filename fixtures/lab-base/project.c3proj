@@ -1,6 +1,6 @@
 {
 	"projectFormatVersion": 1,
-	"savedWithRelease": 49502,
+	"savedWithRelease": 44905,
 	"name": "New project",
 	"runtime": "c3",
 	"useWorker": "auto",
@@ -196,10 +196,6 @@
 		],
 		"subfolders": []
 	},
-	"models3d": {
-		"items": [],
-		"subfolders": []
-	},
 	"properties": {
 		"description": "",
 		"version": "1.0.0.0",
@@ -238,8 +234,8 @@
 		"webgpu": "auto",
 		"multitexturing": "auto",
 		"gpuPreference": "high-performance",
+		"scriptsType": "module",
 		"framerateMode": "vsync",
-		"fixedFramerate": 30,
 		"sampling": "trilinear",
 		"downscaling": "medium",
 		"renderingMode": "auto",
@@ -249,11 +245,10 @@
 		"maxSpriteSheetSize": 2048,
 		"loaderStyle": "splash",
 		"preloadSounds": true,
-		"uidAllocationMode": "increment",
 		"cordovaiOSScheme": "app",
 		"cordovaAndroidScheme": "https",
 		"exportFileStructure": "folders",
-		"scriptsType": "module"
+		"uidAllocationMode": "increment"
 	},
 	"viewportWidth": 480,
 	"viewportHeight": 480,

@@ -40,8 +40,7 @@
 				"offsetY": -2,
 				"useColor": true,
 				"colorSet": false,
-				"relativeFlags": 16383,
-				"version": 1
+				"relativeFlags": 2047
 			},
 			"keyframes": [
 				{
@@ -179,7 +178,7 @@
 				"resultMode": "default",
 				"ease": "default",
 				"pathMode": "default",
-				"resizeMode": "",
+				"resizeMode": "default",
 				"expanded": true,
 				"name": "Property Track Folder",
 				"items": [],
@@ -212,6 +211,5 @@
 		"subfolders": []
 	},
 	"nestedData": {},
-	"childrenNestedData": {},
 	"transitionsData": []
 }

@@ -1,11 +1,11 @@
 # `c3merge check` — cross-file validator
 
-**Status:** not started (2026-09-21). Severities for all 38 lab rows come from the run of
+**Status:** not started (2026-09-21). Severities for all 37 lab rows come from the run of
 2026-09-23 on r449-5 (LTS), r495-2 (stable) and r503 (beta):
 [reports/lab-matrix.md](../reports/lab-matrix.md), data in `reports/lab-matrix.json`.
 
 **Rule across releases:** severity = the worst behaviour among measured releases, since a
-team's project must open in whatever release each member runs. Only 2 of 38 rows differ
+team's project must open in whatever release each member runs. Only 2 of 37 rows differ
 between r449 and r503 (19 and 29, both worse on r449).
 
 ## Severity from the lab
@@ -59,7 +59,8 @@ console). `check` has to catch these, because the user sees nothing useful.
   one of them (e.g. `Text#4 3DShape#4` → `Text#5 3DShape#4`). An earlier run said "kept";
   that came from comparing bytes with the control's save, which the renumbering changes.
 - event `sid` missing, row 5: regenerated.
-- `savedWithRelease` older (r449-5, the LTS), row 21: loads, and the save bumps it.
+- `savedWithRelease` older than the editor: every stable and beta run opens the
+  r449-saved lab-base, which upgrades normally (row 21 dropped).
 - instance missing a variable its type declares, row 15: added back with the default.
 - hierarchy parent listing a child uid that doesn't exist, or a child whose `parent-uid`
   doesn't exist, rows 31 and 31b: the dangling link is dropped.

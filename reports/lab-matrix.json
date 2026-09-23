@@ -222,17 +222,6 @@
 		"cause": ""
 	},
 	{
-		"row": "21",
-		"title": "`savedWithRelease` older: r449-5 (LTS)",
-		"release": "r449-5",
-		"editor": "loads, keeps it",
-		"present": true,
-		"dropped": [],
-		"previewStarts": true,
-		"previewErrors": false,
-		"cause": ""
-	},
-	{
 		"row": "22",
 		"title": "animation frame `imageSpriteId` duplicated",
 		"release": "r449-5",
@@ -642,17 +631,6 @@
 		"cause": ""
 	},
 	{
-		"row": "21",
-		"title": "`savedWithRelease` older: r449-5 (LTS)",
-		"release": "r495-2",
-		"editor": "repairs silently",
-		"present": false,
-		"dropped": [],
-		"previewStarts": true,
-		"previewErrors": false,
-		"cause": ""
-	},
-	{
 		"row": "22",
 		"title": "animation frame `imageSpriteId` duplicated",
 		"release": "r495-2",
@@ -1056,17 +1034,6 @@
 		"release": "r503",
 		"editor": "refuses",
 		"present": null,
-		"dropped": [],
-		"previewStarts": true,
-		"previewErrors": false,
-		"cause": ""
-	},
-	{
-		"row": "21",
-		"title": "`savedWithRelease` older: r449-5 (LTS)",
-		"release": "r503",
-		"editor": "repairs silently",
-		"present": false,
 		"dropped": [],
 		"previewStarts": true,
 		"previewErrors": false,

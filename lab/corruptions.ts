@@ -139,11 +139,6 @@ export const corruptions: Corruption[] = [
     apply: (d) => editJson(d, C3PROJ, (p) => { const a = p.usedAddons.find((x: Json) => x.id === "Sprite"); a.version = "0.0.1"; a.bundled = true; }) },
   { row: "20", title: "`savedWithRelease` newer than editor",
     apply: (d) => editJson(d, C3PROJ, (p) => { p.savedWithRelease = 99900; }) },
-  { row: "21", title: "`savedWithRelease` older: r449-5 (LTS)",
-    // r449 is the LTS release many users still run. (A much older number like r300 only
-    // tests a fake: C3 then expects the lowercase file names very old releases used.)
-    apply: (d) => editJson(d, C3PROJ, (p) => { p.savedWithRelease = 44905; }),
-    present: async (d) => (await readJson(d, C3PROJ)).savedWithRelease === 44905 },
   { row: "22", title: "animation frame `imageSpriteId` duplicated",
     apply: (d) => editJson(d, "objectTypes/3DShape.json", (t) => { const f = t.animations.items[0].frames; f[1].imageSpriteId = f[0].imageSpriteId; }) },
   { row: "23", title: "image file missing for a frame",

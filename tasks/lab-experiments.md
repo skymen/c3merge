@@ -1,6 +1,6 @@
 # Lab: what does C3 tolerate?
 
-**Status:** all 38 rows (34 + variants) measured on r449-5 (LTS), r495-2 (stable) and r503
+**Status:** all 37 rows (33 + variants) measured on r449-5 (LTS), r495-2 (stable) and r503
 (beta), 2026-09-23. Only rows 19 and 29 differ between releases. Harness
 in `lab/` (`npm run lab -- [--releases stable,beta] [--rows …]`), results in
 [reports/lab-matrix.md](../reports/lab-matrix.md), severities in
@@ -23,10 +23,14 @@ in `lab/` (`npm run lab -- [--releases stable,beta] [--rows …]`), results in
   thinks changed (skymen, confirmed by rows 26–27 before the switch to Save as).
 
 ## LTS (r449-5)
-lab-base uses only features r449 has (skymen swapped out the 3D shape `set-quaternion`
-action). It's still saved by r495-2, so for releases older than the base the harness
-lowers `savedWithRelease` in its working copy; the old editor then judges the content.
-Row 21 is meaningless on r449 itself (it *is* r449).
+`fixtures/lab-base` is saved by r449-5, the LTS, so every release in the table opens it
+and newer ones upgrade it like any older project. It was authored in r495-2 by skymen
+(using only features r449 has), then re-saved once by r449-5 on his request, 2026-09-23:
+r495-2's version is in git (c70d722). That re-save lost r495-only data (3D shape `depth`
+120 became `z-height` 15, layer `sampling` and some timeline fields went), none of which
+the rows use: all 111 verdicts were unchanged. No tool re-saves with an older release
+automatically (DESIGN.md). Row 21 ("saved with an older release") was dropped, since every
+stable and beta run now opens an r449 project.
 
 ## What the lab corrected
 - "C3 regenerates missing/duplicate sids silently": **half true**. Duplicate uids are

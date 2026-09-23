@@ -9,7 +9,7 @@ import { C3Editor, resolveRelease, type Release } from "c3cli";
 import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { corruptions, editJson, type Corruption } from "./corruptions.ts";
+import { corruptions, type Corruption } from "./corruptions.ts";
 
 const { values: args } = parseArgs({
   options: {
@@ -79,9 +79,6 @@ async function runOne(editor: C3Editor, rel: Release, c: Corruption | null, cont
     row, title: c?.title ?? "untouched base project", release, editor: "error", dialogs: [], survivedIn: [], dropped: [], present: null, preview: "n/a", cause: "", detail: "", savedDir: null,
   };
   await cp(BASE, input, { recursive: true });
-  // The base is saved by a recent release; an older editor (e.g. the r449 LTS) refuses it on
-  // that number alone. Lower it in this copy so the older editor judges the content itself.
-  await editJson(input, "project.c3proj", (p) => { if (p.savedWithRelease > rel.num) p.savedWithRelease = rel.num; });
   if (c) {
     const missing = await c.needs?.(input);
     if (missing) return { ...r, editor: "skipped", detail: `base project needs ${missing}` };
@@ -198,7 +195,7 @@ async function writeMatrix(results: RowResult[]) {
     "- **repairs silently**: opens with no dialog, and the corruption is gone from the Save as output (C3 may repair differently from the original, e.g. renumber UIDs).",
     "- **loads with notice**: opens, but shows a dialog (listed).",
     "- **refuses** / **crashes**: does not open. The dialog is almost always the generic \"Failed to open project\"; the cell shows the editor's own exception from the console.",
-    "- For releases older than the base project (the r449 LTS), the harness lowers `savedWithRelease` in its working copy, so the old editor judges the content rather than refusing on the number.",
+    "- `fixtures/lab-base` is saved by r449-5 (the LTS), so every release in the table opens it; newer releases upgrade it as they would any older project.",
     "- Plain Ctrl+S only rewrites files C3 considers changed (on both releases), so a corruption in an untouched file stays on disk until C3 touches it. That's why this lab uses Save as.",
     "",
     `| # | Corruption | ${releases.map((r) => `Editor ${r} | Preview ${r}`).join(" | ")} |`,

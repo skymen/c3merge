@@ -52,8 +52,8 @@
 							1,
 							1
 						],
-						"z": 0,
-						"angle": 0
+						"angle": 0,
+						"zElevation": 0
 					}
 				},
 				{
@@ -89,23 +89,20 @@
 							"z": true,
 							"w": true,
 							"h": true,
-							"d": true,
 							"a": true,
 							"o": false,
 							"v": false,
+							"d": true,
 							"sm": "normal"
 						},
 						"preview": {
 							"transformX": 0,
 							"transformY": 0,
-							"transformZ": 0,
 							"transformW": 2.220446049250313e-16,
 							"transformH": 2.220446049250313e-16,
-							"transformD": 0,
 							"transformA": 0,
 							"transformSX": 0,
 							"transformSY": 0,
-							"transformSZ": 0,
 							"transformO": 0,
 							"previewSceneGraph": false
 						}
@@ -125,8 +122,8 @@
 							1,
 							1
 						],
-						"z": 0,
-						"angle": 0
+						"angle": 0,
+						"zElevation": 0
 					}
 				},
 				{
@@ -172,10 +169,10 @@
 									"z": true,
 									"w": true,
 									"h": true,
-									"d": true,
 									"a": true,
 									"o": false,
 									"v": false,
+									"d": true,
 									"sm": "normal"
 								}
 							}
@@ -186,23 +183,20 @@
 							"z": true,
 							"w": true,
 							"h": true,
-							"d": true,
 							"a": true,
 							"o": false,
 							"v": false,
+							"d": true,
 							"sm": "normal"
 						},
 						"preview": {
 							"transformX": 0,
 							"transformY": 0,
-							"transformZ": 0,
 							"transformW": 0,
 							"transformH": 0,
-							"transformD": 0,
 							"transformA": 0,
 							"transformSX": 0,
 							"transformSY": 0,
-							"transformSZ": 0,
 							"transformO": 0,
 							"previewSceneGraph": false
 						}
@@ -222,8 +216,8 @@
 							0,
 							1
 						],
-						"z": 0,
-						"angle": 0
+						"angle": 0,
+						"zElevation": 0
 					}
 				}
 			],
@@ -245,7 +239,6 @@
 				1
 			],
 			"isTransparent": false,
-			"sampling": "auto",
 			"parallaxX": 1,
 			"parallaxY": 1,
 			"scaleRate": 1,
@@ -258,13 +251,16 @@
 			"global": false
 		}
 	],
+	"scene-graphs-folder-root": {
+		"items": [],
+		"subfolders": []
+	},
 	"sid": 619567822903316,
 	"nonworld-instances": [],
 	"effectTypes": [],
 	"width": 960,
 	"height": 960,
 	"unboundedScrolling": false,
-	"sampling": "auto",
 	"vpX": 0.5,
 	"vpY": 0.5,
 	"projection": "perspective",
