@@ -217,9 +217,9 @@ async function writeMatrix(results: RowResult[]) {
   }
   await mkdir(path.join(ROOT, "reports"), { recursive: true });
   await writeFile(path.join(ROOT, "reports/lab-matrix.md"), lines.join("\n") + "\n");
-  // Machine-readable twin, keyed by row and release: what `check` severities are derived
-  // from, so a new C3 release means re-running the lab, not editing code.
+  // Machine-readable twin, keyed by row and release, shipped with `check`: its severities
+  // are derived from it, so a new C3 release means re-running the lab, not editing code.
   const data = results.filter((r) => r.row !== "control").map(({ row, title, release, editor, present, dropped, preview, cause }) =>
     ({ row, title, release, editor, present, dropped, previewStarts: !preview.startsWith("doesn't start"), previewErrors: preview.startsWith("runs,"), cause }));
-  await writeFile(path.join(ROOT, "reports/lab-matrix.json"), JSON.stringify(data, null, "\t"));
+  await writeFile(path.join(ROOT, "src/check/lab-matrix.json"), JSON.stringify(data, null, "\t"));
 }

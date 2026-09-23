@@ -8,7 +8,10 @@
     "rootDir": "src",
     "skipLibCheck": true,
     "declaration": true,
-    "rewriteRelativeImportExtensions": true
+    "rewriteRelativeImportExtensions": true,
+    "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }

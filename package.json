@@ -6,15 +6,23 @@
   "scripts": {
     "build": "tsc",
     "test": "node --import tsx --test test/*.test.ts",
-    "lab": "tsx lab/run.ts"
+    "lab": "tsx lab/run.ts",
+    "check": "tsx src/cli.ts check"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
+    "@types/yauzl": "^3.4.0",
     "c3cli": "file:../c3cli",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "yauzl": "^3.4.0"
+  },
+  "bin": {
+    "c3merge": "./bin/c3merge.js"
   }
 }

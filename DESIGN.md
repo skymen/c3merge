@@ -99,7 +99,7 @@ c3merge/
 **(decided 2026-09-23)** c3merge must keep working on C3 releases that don't exist yet,
 without a code change. No logic keyed on release numbers or on the editor's error text.
 Profiles have a fallback for unknown keys and file kinds, and validator severities are data
-from the lab (`reports/lab-matrix.json`), refreshed by re-running it on new releases.
+from the lab (`src/check/lab-matrix.json`), refreshed by re-running it on new releases.
 
 **(decided 2026-09-23)** No tool here ever saves a project with an older release than it
 was saved with, or lowers `savedWithRelease` to make an older editor accept it. Going back

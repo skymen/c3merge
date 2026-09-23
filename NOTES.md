@@ -17,13 +17,12 @@ packaging/release · `[docs]`
 - [corpus] Build the fixture corpus: tiny hand-made projects + one real base/ours/theirs triple per file kind ([tasks/test-corpus.md](tasks/test-corpus.md))
 - [profiles] Write the per-kind profile table from real files before writing the engine ([tasks/profiles.md](tasks/profiles.md))
 - [core] Generic keyed 3-way merge engine: identity matching, sid fallback, order-semantic lists, delete-vs-modify, collision log, exit codes ([tasks/core-merge-engine.md](tasks/core-merge-engine.md))
-- [core] Output must be byte-identical to what C3 writes for untouched regions: tabs, key order, number formatting, trailing newline ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#output-fidelity))
+- [core] Output must be byte-identical to what C3 writes: `JSON.stringify(v, null, "\t")` (compact for uistate/brushes), no trailing newline, verified on 2,121 files ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#output-fidelity))
 - [driver] Git merge driver: `%O %A %B %P` protocol, `.gitattributes` template, `install` / `init` / `doctor` commands ([tasks/git-driver.md](tasks/git-driver.md))
-- [check] Implement `c3merge check` from the lab's severities (`reports/lab-matrix.json`, worst across r449/r495/r503) ([tasks/check-validator.md](tasks/check-validator.md))
 
 ## Normal
 
-- [check] `c3merge check <project>`: cross-file invariants (dangling object types, layers, event sheets, families, sids, images, addons) ([tasks/check-validator.md](tasks/check-validator.md))
+- [check] Action/condition ids per addon (lab row 11): needs each addon's ACE list; maybe from the editor via c3cli, per release ([tasks/check-validator.md](tasks/check-validator.md))
 - [check] Post-merge hook: driver runs `check` on the whole project once all files are merged, not per file ([tasks/check-validator.md](tasks/check-validator.md#when-to-run))
 - [profiles] Order-semantic lists: events (execution order), layer instances (z-order), layers, animations frames — define insert-position rule and when a reorder is a real conflict ([tasks/profiles.md](tasks/profiles.md#ordering))
 - [core] Secondary matching when a sid exists on only one side (C3 regenerated it): match by name/type/objectClass+position before treating as delete+add ([tasks/core-merge-engine.md](tasks/core-merge-engine.md#sid-fallback))
