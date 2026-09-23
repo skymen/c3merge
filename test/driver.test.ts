@@ -6,13 +6,14 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { init, install } from "../src/driver.ts";
+import { init, install, installHooks } from "../src/driver.ts";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const LAB = path.join(ROOT, "fixtures", "lab-base");
 const CLI = path.join(ROOT, "src", "cli.ts");
 const TSX = import.meta.resolve("tsx");
-const COMMAND = `'${process.execPath}' --import '${TSX}' '${CLI}' merge-driver %O %A %B %P`;
+const C3MERGE = `'${process.execPath}' --import '${TSX}' '${CLI}'`;
+const COMMAND = `${C3MERGE} merge-driver %O %A %B %P`;
 const c3 = (v: unknown) => JSON.stringify(v, null, "\t");
 
 // A repo with lab-base committed on main, the driver installed locally.
@@ -131,6 +132,55 @@ test("merge and rebase: an object type renamed on one side reaches the other sid
       assert.equal(res.status, 0, `${op}: ${res.stdout}${res.stderr}`);
       const types = JSON.parse(r.read("layouts/Layout 1.json")).layers[0].instances.map((i: any) => `${i.type}#${i.uid}`);
       assert.ok(types.includes("Hero#50") && !types.some((t: string) => t.startsWith("Sprite")), `${op}: ${types}`);
+    } finally { r.cleanup(); }
+  }
+});
+
+// One side renames Sprite (as C3 does, everywhere); the other adds a new layout with Sprite
+// instances, a file only it has: git takes it as is, without calling the driver.
+function renameVsNewLayout(r: ReturnType<typeof repo>) {
+  installHooks(r.dir, C3MERGE);
+  r.git("checkout", "-qb", "feature");
+  const l3 = JSON.parse(r.read("layouts/Layout 1.json"));
+  Object.assign(l3, { name: "Layout 3", sid: 333333333333333 });
+  writeFileSync(r.file("layouts/Layout 3.json"), c3(l3));
+  r.edit("project.c3proj", (v) => v.layouts.items.push("Layout 3"));
+  r.commit("Layout 3 with Sprites");
+  r.git("checkout", "-q", "main");
+  renameType(r, "Sprite", "Hero");
+  r.commit("rename Sprite to Hero");
+}
+const typesIn = (text: string) => JSON.parse(text).layers[0].instances.map((i: any) => i.type).filter((t: string) => t === "Sprite" || t === "Hero");
+
+test("finish step: after a clean merge, renames reach files the merge didn't, left uncommitted", () => {
+  const r = repo();
+  try {
+    renameVsNewLayout(r);
+    const m = r.run("merge", "--no-edit", "feature");
+    assert.equal(m.status, 0, m.stdout + m.stderr);
+    assert.match(m.stderr, /applied Sprite → Hero to 1 file\(s\)/);
+    assert.deepEqual([...new Set(typesIn(r.read("layouts/Layout 3.json")))], ["Hero"], "fixed in the working tree");
+    assert.deepEqual([...new Set(typesIn(r.git("show", "HEAD:game/layouts/Layout 3.json")))], ["Sprite"], "the merge commit is git's");
+    assert.match(r.git("status", "--porcelain"), /^ M "?game\/layouts\/Layout 3\.json"?$/m, "left for review");
+    assert.ok(!r.read("layouts/Layout 3.json").endsWith("\n"), "C3's format");
+  } finally { r.cleanup(); }
+});
+
+test("finish step: after a rebase, and after a merge that stops on a conflict", () => {
+  for (const op of ["rebase", "conflict"]) {
+    const r = repo();
+    try {
+      renameVsNewLayout(r);
+      let res;
+      if (op === "rebase") { r.git("checkout", "-q", "feature"); res = r.run("rebase", "main"); assert.equal(res.status, 0, res.stderr); }
+      else {
+        r.git("checkout", "-q", "feature"); r.edit("layouts/Layout 2.json", (v) => { v.width = 111; }); r.commit("w111");
+        r.git("checkout", "-q", "main"); r.edit("layouts/Layout 2.json", (v) => { v.width = 222; }); r.commit("w222");
+        res = r.run("merge", "--no-edit", "feature");
+        assert.notEqual(res.status, 0, "conflict on Layout 2");
+      }
+      assert.match(res.stderr, /applied Sprite → Hero to 1 file\(s\)/, `${op}: ${res.stderr}`);
+      assert.deepEqual([...new Set(typesIn(r.read("layouts/Layout 3.json")))], ["Hero"], op);
     } finally { r.cleanup(); }
   }
 });

@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { ATTRIBUTES, install } from "../src/driver.ts";
+import { ATTRIBUTES, install, installHooks } from "../src/driver.ts";
 import { checkProject } from "../src/check/index.ts";
 
 const { positionals, values } = parseArgs({ allowPositionals: true, options: { open: { type: "boolean" }, keep: { type: "boolean" }, branch: { type: "string" } } });
@@ -29,6 +29,7 @@ function attempt(withDriver: boolean) {
     writeFileSync(path.join(dir, ".git", "info", "attributes"), ATTRIBUTES + "\n");
     const cwd = process.cwd(); process.chdir(dir);
     try { install({ local: true, command: COMMAND }); } finally { process.chdir(cwd); }
+    installHooks(dir, COMMAND.replace(" merge-driver %O %A %B %P", ""));
   }
   const t0 = Date.now();
   const m = spawnSync("git", ["merge", "--no-edit", "--no-ff", p2], { cwd: dir, encoding: "utf8", maxBuffer: 1 << 30 });
@@ -44,7 +45,7 @@ rmSync(plain.dir, { recursive: true, force: true });
 const c3 = attempt(true);
 console.log(`\nwith c3merge: exit ${c3.status}, ${c3.unmerged.length} conflicted file(s), ${c3.seconds.toFixed(1)} s`);
 for (const f of c3.unmerged) console.log(`  ${f}`);
-console.log(c3.stderr.split("\n").filter((l) => l.startsWith("c3merge")).map((l) => `  ${l}`).join("\n"));
+console.log(c3.stderr.split("\n").filter((l) => l.startsWith("c3merge") || l.startsWith("  ")).map((l) => `  ${l}`).join("\n"));
 
 if (!c3.unmerged.length) {
   // Only what the merge introduced: problems already on one of the parents aren't its fault.

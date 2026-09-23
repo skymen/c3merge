@@ -1,7 +1,7 @@
 // Git integration: the merge driver git calls for each file, and the commands that set it
 // up (install, init, doctor). See tasks/git-driver.md.
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { driverContext } from "./context.ts";
 import { mergeFile, ParseError, type Issue } from "./engine/merge.ts";
@@ -109,11 +109,13 @@ function remindCheck() {
 
 // ── setup ─────────────────────────────────────────────────────────────────────────────
 
-// The command git runs. Absolute paths, because git GUIs often don't have the user's PATH.
-export function driverCommand(): string {
+// How git (and hooks) run c3merge. Absolute paths, because git GUIs often don't have the
+// user's PATH.
+export function c3mergeCommand(): string {
   const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-  return [process.execPath, ...process.execArgv, process.argv[1]].map(q).join(" ") + " merge-driver %O %A %B %P";
+  return [process.execPath, ...process.execArgv, process.argv[1]].map(q).join(" ");
 }
+export const driverCommand = () => `${c3mergeCommand()} merge-driver %O %A %B %P`;
 
 export function install(opts: { local?: boolean; command?: string }): string[] {
   const scope = opts.local ? "--local" : "--global";
@@ -145,19 +147,46 @@ export const ATTRIBUTES = `${BEGIN}: structural merges of Construct 3 projects (
 *.uistate.json            merge=ours
 ${END}`;
 
-// Write or refresh the c3merge block in the repo's .gitattributes, keeping everything else.
-export function init(repoRoot: string): "created" | "updated" | "unchanged" {
-  const file = path.join(repoRoot, ".gitattributes");
+// Write or refresh a c3merge block (BEGIN..END) in a file, keeping everything else.
+function writeBlock(file: string, block: string, header = ""): "created" | "updated" | "unchanged" {
   const old = existsSync(file) ? readFileSync(file, "utf8") : null;
   let next: string;
-  if (old === null) next = `${ATTRIBUTES}\n`;
+  if (old === null) next = `${header}${block}\n`;
   else {
     const i = old.indexOf(BEGIN), j = old.indexOf(END);
-    next = i >= 0 && j > i ? old.slice(0, i) + ATTRIBUTES + old.slice(j + END.length) : `${old}${old.endsWith("\n") || !old ? "" : "\n"}${ATTRIBUTES}\n`;
+    next = i >= 0 && j > i ? old.slice(0, i) + block + old.slice(j + END.length) : `${old}${old.endsWith("\n") || !old ? "" : "\n"}${block}\n`;
   }
   if (next === old) return "unchanged";
   writeFileSync(file, next);
   return old === null ? "created" : "updated";
+}
+
+// .gitattributes in the repo (committed, shared).
+export const init = (repoRoot: string) => writeBlock(path.join(repoRoot, ".gitattributes"), ATTRIBUTES);
+
+// Hooks in this clone (never committed): the finish step when a merge writes its result
+// (post-index-change with 1 and GITHEAD_* set, which only `git merge` does) and after a
+// rebase (post-rewrite). The shell test keeps every other index write free.
+export const HOOKS = (command: string): Record<string, string> => ({
+  "post-index-change": `${BEGIN}: replay renames the merge couldn't reach, before anything is committed
+if [ "$1" = 1 ] && env | grep -q '^GITHEAD_'; then ${command} finish --after merge || true; fi
+${END}`,
+  "post-rewrite": `${BEGIN}: replay renames after a rebase
+if [ "$1" = rebase ]; then ${command} finish --after rebase < /dev/null || true; fi
+${END}`,
+});
+
+export function installHooks(repoRoot: string, command = c3mergeCommand()): { hook: string; result: string }[] | { hooksPath: string } {
+  const custom = tryGit(["config", "--get", "core.hooksPath"], repoRoot);
+  if (custom) return { hooksPath: custom }; // a managed hooks folder (often committed): don't write into it
+  const dir = path.resolve(repoRoot, git(["rev-parse", "--git-path", "hooks"], repoRoot));
+  mkdirSync(dir, { recursive: true });
+  return Object.entries(HOOKS(command)).map(([hook, block]) => {
+    const file = path.join(dir, hook);
+    const result = writeBlock(file, block, "#!/bin/sh\n");
+    chmodSync(file, 0o755);
+    return { hook, result };
+  });
 }
 
 export interface DoctorLine { ok: boolean; text: string; fix?: string }
@@ -174,6 +203,11 @@ export function doctor(cwd = process.cwd()): DoctorLine[] {
   }
   const root = tryGit(["rev-parse", "--show-toplevel"], cwd);
   if (!root) { out.push({ ok: false, text: "not inside a git repository" }); return out; }
+  const hooksDir = path.resolve(root, git(["rev-parse", "--git-path", "hooks"], root));
+  const missing = Object.keys(HOOKS("")).filter((h) => !(existsSync(path.join(hooksDir, h)) && readFileSync(path.join(hooksDir, h), "utf8").includes(BEGIN)));
+  out.push(missing.length
+    ? { ok: false, text: `hooks missing in this clone: ${missing.join(", ")} (renames won't reach files the merge didn't touch)`, fix: "c3merge init" }
+    : { ok: true, text: "hooks: finish step after merges and rebases" });
   const proj = git(["ls-files", "*.c3proj"], root).split("\n").filter(Boolean)[0];
   if (!proj) out.push({ ok: false, text: "no .c3proj tracked in this repository (folder projects only; .c3p files can't be merged)" });
   else {

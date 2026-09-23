@@ -1,0 +1,103 @@
+// The finish step: right after a merge (or rebase) writes its result, before anything is
+// committed, replay renames in every file. Git only calls the driver for files both sides
+// changed, so a file only one side changed may still use a name the other side renamed
+// (85c85d2a: new instances of TiledShapeDark next to its rename to woodPlanksShape).
+// Renames = sids whose name changed between the common ancestor and the files on disk.
+// Fixes are left uncommitted, for review in C3; then `check` runs.
+import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { checkProject } from "./check/index.ts";
+import { readTypes, readTypesFromDisk } from "./context.ts";
+import { applyRenameSet, resultRenameSet } from "./engine/renames.ts";
+import { detectStyle, render } from "./engine/render.ts";
+import { profileFor } from "./profiles/index.ts";
+
+export interface FinishReport {
+  project: string;
+  renames: string[];
+  fixed: string[];                                    // files rewritten (uncommitted)
+  unsure: { file: string; where: string; expr: string; reason: string }[];
+  conflicted: string[];                               // not touched: still has conflict markers
+  check?: { errors: number; warnings: number };
+}
+
+const git = (args: string[], cwd = ".") => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 1 << 30 }).trim();
+
+// The merge's common ancestor, from what's in progress or just done.
+export function mergeBase(after: "merge" | "rebase" | "manual"): string {
+  const gitDir = git(["rev-parse", "--absolute-git-dir"]);
+  if (after === "rebase") return git(["merge-base", "ORIG_HEAD", "HEAD"]);
+  const theirs = Object.keys(process.env).find((k) => /^GITHEAD_[0-9a-f]{40,64}$/.test(k))?.slice("GITHEAD_".length)
+    ?? (existsSync(path.join(gitDir, "MERGE_HEAD")) ? readFileSync(path.join(gitDir, "MERGE_HEAD"), "utf8").trim().split("\n")[0] : undefined);
+  if (theirs) return git(["merge-base", "HEAD", theirs]);
+  const parents = git(["rev-list", "--parents", "-n1", "HEAD"]).split(" ").slice(1);
+  if (parents.length === 2) return git(["merge-base", parents[0], parents[1]]);
+  throw new Error("no merge in progress, and HEAD isn't a merge commit");
+}
+
+export function finish(after: "merge" | "rebase" | "manual"): FinishReport[] {
+  const top = git(["rev-parse", "--show-toplevel"]);
+  const base = mergeBase(after);
+  const roots = git(["ls-files", "--", "*.c3proj"], top).split("\n").filter(Boolean).map((f) => path.posix.dirname(f));
+  return [...new Set(roots)].map((root) => finishProject(top, root, base));
+}
+
+function finishProject(top: string, root: string, base: string): FinishReport {
+  const dir = path.join(top, root);
+  const set = resultRenameSet(readTypes(top, base, root), readTypesFromDisk(dir));
+  const report: FinishReport = {
+    project: root, fixed: [], unsure: [], conflicted: [],
+    renames: [...Object.entries(set.types).map(([a, b]) => `${a} → ${b}`), ...set.members.map((m) => `${[...m.owner][0]}.${m.old} → ${m.new}${m.kind === "behavior" ? " (behavior)" : ""}`)],
+  };
+  if (report.renames.length) {
+    for (const rel of c3Files(dir)) {
+      const file = path.join(dir, rel);
+      const text = readFileSync(file, "utf8");
+      if (/^<<<<<<< /m.test(text)) { report.conflicted.push(rel); continue; }
+      let v: unknown;
+      try { v = JSON.parse(text); } catch { continue; }
+      const before = JSON.stringify(v);
+      applyRenameSet(profileFor(rel).kind, v, set, (where, expr, reason) => report.unsure.push({ file: rel, where, expr, reason }));
+      if (JSON.stringify(v) === before) continue;
+      writeFileSync(file, render(v, detectStyle(text)));
+      report.fixed.push(rel);
+    }
+  }
+  return report;
+}
+
+// The C3 files renames can reach: the project file, event sheets, layouts, families.
+function c3Files(dir: string): string[] {
+  const out = readdirSync(dir).filter((f) => f.endsWith(".c3proj"));
+  for (const sub of ["eventSheets", "layouts", "families"]) {
+    const abs = path.join(dir, sub);
+    if (!existsSync(abs)) continue;
+    for (const e of readdirSync(abs, { recursive: true, withFileTypes: true })) {
+      if (e.isFile() && e.name.endsWith(".json") && !e.name.endsWith(".uistate.json")) out.push(path.relative(dir, path.join(e.parentPath, e.name)).split(path.sep).join("/"));
+    }
+  }
+  return out;
+}
+
+export async function finishWithCheck(after: "merge" | "rebase" | "manual"): Promise<FinishReport[]> {
+  const reports = finish(after);
+  const top = git(["rev-parse", "--show-toplevel"]);
+  for (const r of reports) {
+    const c = await checkProject(path.join(top, r.project)).catch(() => null);
+    if (c) r.check = { errors: c.counts.error, warnings: c.counts.warning };
+  }
+  return reports;
+}
+
+export function describe(reports: FinishReport[]): string[] {
+  const lines: string[] = [];
+  for (const r of reports) {
+    const where = r.project === "." ? "" : ` (${r.project})`;
+    if (r.fixed.length) lines.push(`c3merge${where}: applied ${r.renames.join(", ")} to ${r.fixed.length} file(s) the merge didn't reach; not committed, check them in C3:`, ...r.fixed.map((f) => `  ${f}`));
+    for (const u of r.unsure) lines.push(`c3merge${where}: not sure how to rename in ${u.file}, ${u.where}: ${u.expr} (${u.reason}); fix it in C3`);
+    if (r.conflicted.length && r.renames.length) lines.push(`c3merge${where}: ${r.conflicted.length} conflicted file(s) not checked for renames yet: run \`c3merge finish\` again after resolving them`);
+    if (r.check) lines.push(`c3merge${where}: check: ${r.check.errors} error(s), ${r.check.warnings} warning(s)${r.check.errors ? " (run `c3merge check` for details)" : ""}`);
+  }
+  return lines;
+}

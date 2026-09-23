@@ -4,7 +4,7 @@
 // - what an object type gained on a side, itself or through a family, which C3 then adds
 //   to every instance by itself (variables, behaviors, effects).
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export interface Gained { vars: string[]; behaviors: string[]; effects: string[] }
@@ -46,16 +46,37 @@ export function readTypes(repo: string, rev: string, root: string): Table {
     try {
       const v = JSON.parse(body);
       if (typeof v.sid !== "number" || typeof v.name !== "string") continue;
-      out[v.sid] = {
-        kind: `/${f}`.includes("/families/") ? "family" : "objectType", name: v.name, plugin: typeof v["plugin-id"] === "string" ? v["plugin-id"] : "",
-        vars: named(v.instanceVariables), behaviors: named(v.behaviorTypes),
-        effects: Array.isArray(v.effectTypes) ? v.effectTypes.map((e: any) => e?.name).filter((n: unknown) => typeof n === "string") : [],
-        members: Array.isArray(v.members) ? v.members : [],
-      };
+      out[v.sid] = typeInfo(`/${f}`.includes("/families/") ? "family" : "objectType", v);
     } catch { /* not JSON: ignore */ }
   }
   return out;
 }
+
+// The same, from the files on disk (the result of a merge). Files that don't parse (still
+// conflicted) are left out.
+export function readTypesFromDisk(root: string): Table {
+  const out: Table = {};
+  for (const dir of ["objectTypes", "families"]) {
+    const abs = path.join(root, dir);
+    if (!existsSync(abs)) continue;
+    for (const e of readdirSync(abs, { recursive: true, withFileTypes: true })) {
+      if (!e.isFile() || !e.name.endsWith(".json") || e.name.endsWith(".uistate.json")) continue;
+      try {
+        const v = JSON.parse(readFileSync(path.join(e.parentPath, e.name), "utf8"));
+        if (typeof v.sid !== "number" || typeof v.name !== "string") continue;
+        out[v.sid] = typeInfo(dir === "families" ? "family" : "objectType", v);
+      } catch { /* conflicted or broken: skip */ }
+    }
+  }
+  return out;
+}
+
+const typeInfo = (kind: TypeInfo["kind"], v: any): TypeInfo => ({
+  kind, name: v.name, plugin: typeof v["plugin-id"] === "string" ? v["plugin-id"] : "",
+  vars: named(v.instanceVariables), behaviors: named(v.behaviorTypes),
+  effects: Array.isArray(v.effectTypes) ? v.effectTypes.map((e: any) => e?.name).filter((n: unknown) => typeof n === "string") : [],
+  members: Array.isArray(v.members) ? v.members : [],
+});
 
 export function changes(base: Table, side: Table): Changes {
   const types: Record<string, string> = {};

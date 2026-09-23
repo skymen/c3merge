@@ -3,7 +3,8 @@
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { checkProject, invariants, severityOf } from "./check/index.ts";
-import { doctor, init, install, mergeDriver } from "./driver.ts";
+import { c3mergeCommand, doctor, HOOKS, init, install, installHooks, mergeDriver } from "./driver.ts";
+import { describe, finishWithCheck } from "./finish.ts";
 
 const [command, ...rest] = process.argv.slice(2);
 
@@ -46,6 +47,20 @@ async function main(): Promise<number> {
     if (!root) { console.error("c3merge init: not inside a git repository"); return 2; }
     const r = init(root);
     console.log(r === "unchanged" ? ".gitattributes already has the c3merge block" : `.gitattributes ${r}: commit it so everyone gets the same merges`);
+    const hooks = installHooks(root);
+    if ("hooksPath" in hooks) {
+      console.log(`hooks: this repo uses its own hooks folder (${hooks.hooksPath}), which c3merge doesn't write to. Add these to its hooks:`);
+      for (const [hook, block] of Object.entries(HOOKS(c3mergeCommand()))) console.log(`\n# ${hook}\n${block}`);
+    }
+    else for (const h of hooks) if (h.result !== "unchanged") console.log(`.git/hooks/${h.hook} ${h.result}: renames reach every file after merges and rebases (this clone only)`);
+    return 0;
+  }
+  if (command === "finish") {
+    const { values } = parseArgs({ args: rest, options: { after: { type: "string", default: "manual" } } });
+    const after = values.after as "merge" | "rebase" | "manual";
+    const lines = describe(await finishWithCheck(after));
+    for (const l of lines) (after === "manual" ? console.log : console.error)(l);
+    if (after === "manual" && !lines.length) console.log("c3merge finish: no renames to replay");
     return 0;
   }
   if (command === "doctor") {
@@ -62,8 +77,9 @@ async function main(): Promise<number> {
   }
   console.error([
     "usage: c3merge install [--local]      set up the merge driver in git config (once per machine)",
-    "       c3merge init                   add the c3merge block to .gitattributes (once per repository)",
+    "       c3merge init                   .gitattributes (committed) and hooks (this clone)",
     "       c3merge doctor                 check the setup",
+    "       c3merge finish                 replay renames after a merge (hooks run it for you)",
     "       c3merge check <project> [--json | --github] [--all]",
     "       c3merge invariants",
     "       c3merge merge-driver %O %A %B %P   (called by git)",

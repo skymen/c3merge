@@ -80,6 +80,38 @@ function renameSet(ctx: ProjectContext, renamer: "ours" | "theirs"): RenameSet {
   return { types, members };
 }
 
+// Renames between a merge's common ancestor and its result (the finish step): every sid
+// whose name changed, whichever side did it. The result is the reference for owner names.
+export function resultRenameSet(base: Table, result: Table): RenameSet {
+  const set = renameSet({ base, ours: result, theirs: base }, "ours");
+  // A different type, variable or behavior that now carries the old name: references to it
+  // are valid, leave them.
+  const sidOf = (name: string) => Object.entries(base).find(([, x]) => same(x.name, name))?.[0];
+  for (const old of Object.keys(set.types)) {
+    if (Object.entries(result).some(([sid, x]) => same(x.name, old) && sid !== sidOf(old))) delete set.types[old];
+  }
+  set.members = set.members.filter((m) => !Object.values(result).some((x) => [...m.owner].some((o) => same(o, x.name)) &&
+    (m.kind === "var" ? x.vars : x.behaviors).some((v) => same(v.name, m.old))));
+  return set;
+}
+
+// Apply a set to one parsed file (the finish step). Expressions the resolver isn't sure about
+// are left as they are and reported.
+export function applyRenameSet(kind: string, v: unknown, set: RenameSet, onUnsure: (where: string, expr: string, reason: string) => void) {
+  apply(kind, v, set);
+  if (kind !== "eventSheet") return;
+  forEachAce(v, (ace) => {
+    const params = ace.parameters;
+    if (!params || typeof params !== "object") return;
+    for (const key of Object.keys(params)) {
+      const p = (params as any)[key];
+      if (typeof p !== "string" || NAMES_ONLY.has(key) || Object.keys(set.types).some((n) => same(n, p))) continue;
+      const r = renameExpression(p, typeof ace.objectClass === "string" ? ace.objectClass : undefined, set);
+      if (r.uncertain) onUnsure(`${ace.objectClass ?? "function"} ${ace.id ?? ace.callFunction ?? ""} (sid ${ace.sid}) parameter ${key}`, p, r.uncertain);
+    }
+  });
+}
+
 const merge = (a: RenameSet, b: RenameSet): RenameSet => ({ types: { ...a.types, ...b.types }, members: [...a.members, ...b.members] });
 
 // ── applying a set to one version ─────────────────────────────────────────────────────

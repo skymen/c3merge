@@ -88,19 +88,29 @@ Attributes: per project, committed. Driver config: per machine (one line) or `--
 No global attributes file ever.
 
 ## Finish step
-**Status:** proposed (2026-09-23). A rename on one side must reach every file, but git only
-calls the driver for files both sides changed. skymen: it must happen right after the
-merge, before any commit (they reopen C3 to check, then commit). Hooks on git 2.50
-(no config-based hooks, so they go in each clone's `.git/hooks`):
-- During `git merge`, clean or conflicted: `post-index-change` runs with `1` as first
-  argument right after the result is written to the working tree, with `GITHEAD_<theirs>`
-  in the environment (MERGE_HEAD isn't written yet). Other index writes (`status`, `add`)
-  have neither, so the hook exits at once. `post-merge` only runs after a clean merge.
-- Rebase: `post-index-change` per pick, `post-rewrite` once at the end.
-- Single cherry-pick: nothing identifies it.
-Plan: `c3merge init` appends a line to those hooks calling `c3merge finish`. `finish`
-compares object types (and later instance variables) between the common ancestor and the
-merged working tree: a sid whose name changed is a rename, and leftover references to the
-old name are rewritten in every C3 file (only if no type has that name now). Fixes are left
-uncommitted for review in C3. Then `check` runs. On a clean merge git commits before you
-look, so the fixes come on top of the merge commit (or merge with `--no-commit`).
+**Status:** implemented (2026-09-24): `src/finish.ts`, `c3merge finish [--after merge|rebase]`;
+`c3merge init` installs the hooks in the clone; `doctor` reports missing hooks.
+A rename on one side must reach every file, but git only calls the driver for files both
+sides changed; a file only one side changed is taken as is (skymen: fix it right after the
+merge, before any commit, since they reopen C3 to check before committing).
+- Hooks (git 2.50 has no config-based hooks, so they go in each clone's `.git/hooks`, as a
+  `# c3merge begin/end` block appended to any existing hook):
+  - `post-index-change`: runs right after a merge writes its result, clean or conflicted,
+    with `1` as first argument and `GITHEAD_<theirs>` in the environment (MERGE_HEAD isn't
+    written yet). Other index writes (`status`, `add`) have neither: the shell test skips
+    them without starting node.
+  - `post-rewrite` with `rebase`: once at the end of a rebase.
+  - A repo with `core.hooksPath` (husky and co., often committed): `init` doesn't write
+    there and prints the lines to add.
+  - A single cherry-pick is not covered (nothing identifies it); `c3merge finish` by hand.
+- `finish`: renames = sids whose name changed between the common ancestor (merge-base of
+  HEAD and GITHEAD/MERGE_HEAD, of ORIG_HEAD and HEAD after a rebase, or of a merge commit's
+  parents) and the object types on disk; applied to every event sheet, layout, family and
+  the project file that isn't still conflicted (same rules as the engine; unsure
+  expressions are listed, not touched). Rewritten files stay uncommitted. Then `check`.
+- On a clean merge git commits its own result first, so the fixes come on top of the merge
+  commit, uncommitted.
+- Verified: `test/driver.test.ts` (clean merge, rebase, merge stopped on a conflict: a new
+  layout with instances of a type the other side renamed). Replay of `85c85d2a`: the step
+  fixed MT2-2, Subhub-Trials1 and Subhub-Trials2, the three files the person repaired by
+  hand in "merge fix" `46e44c7f`; no reference to `TiledShapeDark` left.
