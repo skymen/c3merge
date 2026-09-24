@@ -1,6 +1,7 @@
 # Distribution / releases
 
-**Status:** npm ready (2026-09-24), not published yet. The other channels aren't started.
+**Status:** `@skymen75/c3cli` 0.1.0 published (2026-09-24); `@skymen75/c3merge` 0.1.0 ready to
+publish (dry run passes). The other channels aren't started.
 
 ## npm (2026-09-24)
 - Names: `@skymen75/c3cli` and `@skymen75/c3merge`. npm refused the unscoped `c3cli` as too

@@ -14,7 +14,7 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [dist] Publish `@skymen75/c3merge` 0.1.0 once `@skymen75/c3cli` is live: switch the devDependency `c3cli` from `file:../c3cli` to `npm:@skymen75/c3cli@^0.1.0` (an alias, so `from "c3cli"` imports stay), `npm install` to refresh the lock, then `npm publish` (it refuses while a `file:` dependency is left) ([tasks/dist.md](tasks/dist.md))
+- [dist] Publish `@skymen75/c3merge` 0.1.0: ready (`npm publish`). `@skymen75/c3cli` 0.1.0 is live (2026-09-24) and the devDependency now points at it (`npm:@skymen75/c3cli@^0.1.0`) ([tasks/dist.md](tasks/dist.md))
 
 ## Normal
 
