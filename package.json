@@ -1,16 +1,43 @@
 {
-  "name": "c3merge",
-  "version": "0.0.1",
-  "private": true,
+  "name": "@skymen75/c3merge",
+  "version": "0.1.0",
+  "description": "Git merge driver and validator for Construct 3 projects: merges what git can't, flags only real conflicts, follows renames",
+  "keywords": [
+    "construct3",
+    "construct-3",
+    "c3",
+    "git",
+    "merge",
+    "merge-driver",
+    "gitattributes"
+  ],
+  "author": "skymen",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
+  "bin": {
+    "c3merge": "bin/c3merge.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "docs"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "node --import tsx --test test/*.test.ts",
     "lab": "tsx lab/run.ts",
-    "check": "tsx src/cli.ts check"
+    "check": "tsx src/cli.ts check",
+    "postinstall": "node bin/postinstall.js",
+    "prepublishOnly": "node scripts/prepublish.mjs && npm test && npm run build"
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
@@ -18,11 +45,5 @@
     "c3cli": "file:../c3cli",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "yauzl": "^3.4.0"
-  },
-  "bin": {
-    "c3merge": "./bin/c3merge.js"
   }
 }

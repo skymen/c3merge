@@ -7,7 +7,7 @@ There are three setup steps, each at a different level:
 
 | Where | Command | How often | Shared? |
 |---|---|---|---|
-| Your machine | `c3merge install` | Once | No: in `~/.gitconfig` |
+| Your machine | `npm install -g @skymen75/c3merge` | Once | No: in `~/.gitconfig` |
 | The repository | `c3merge init`, then commit `.gitattributes` | Once per project | Yes: committed |
 | Your clone | `c3merge init` | Once per clone | No: in `.git/hooks` |
 
@@ -18,23 +18,17 @@ There are three setup steps, each at a different level:
   to git; older versions still work
 - macOS and Linux. Windows hasn't been tested yet.
 
-## 1. Install the command
-
-c3merge isn't published on npm yet. Install it from a checkout:
+## 1. Install it on your machine
 
 ```sh
-git clone <c3merge repository> c3merge
-cd c3merge
-npm install
-npm run build
-npm link
-c3merge                  # prints the usage
+npm install -g @skymen75/c3merge
 ```
 
-`npm link` puts a `c3merge` command on your PATH that points to the checkout. To update,
-run `git pull && npm install && npm run build` in the checkout. Nothing else needs to change.
+To update, run the same command again.
 
-## 2. Set up git on your machine
+A global install with npm also sets up git by running `c3merge install` for you. With
+another package manager, or `--ignore-scripts`, that step may not run. `c3merge doctor`
+tells you, and this does it:
 
 ```sh
 c3merge install
@@ -57,10 +51,13 @@ instead of merging them.
   instead, for people who don't want global settings.
 - The paths are absolute on purpose. Git GUIs (GitHub Desktop, Fork, Sourcetree...) often
   run without your shell's PATH, and absolute paths still work there.
-- Run `c3merge install` again if you move the checkout or remove the Node version it
-  recorded (for example with nvm). `c3merge doctor` tells you when either path is missing.
+- Run `c3merge install` again if you remove the Node version it recorded (for example with
+  nvm). `c3merge doctor` tells you when either path is missing.
+- Don't set it up through `npx`: npx runs c3merge from a cache that npm cleans up, and git
+  would keep calling the old path. `c3merge install` and `c3merge init` refuse to run from
+  npx. Commands that don't record a path, such as `npx @skymen75/c3merge check`, work fine.
 
-## 3. Set up the project
+## 2. Set up the project
 
 In the repository that contains the project:
 
@@ -112,12 +109,12 @@ in git, so every clone needs its own `c3merge init`.
   `post-rewrite` instead.
 - Without the hooks, merges still work. You run `c3merge finish` yourself after merging.
 
-## 4. Check the setup
+## 3. Check the setup
 
 ```sh
 $ c3merge doctor
 ok  git version 2.50.1
-ok  merge driver: '/usr/local/bin/node' '/usr/local/bin/c3merge' merge-driver %O %A %B %P
+ok  merge driver: '/usr/local/bin/node' '/usr/local/lib/node_modules/c3merge/bin/c3merge.js' merge-driver %O %A %B %P
 ok  hooks: finish step after merges and rebases
 ok  .gitattributes: game/project.c3proj uses the c3 driver
 ```
@@ -130,10 +127,8 @@ everything is ok.
 Each person runs, once:
 
 ```sh
-# on their machine
-cd c3merge && npm install && npm run build && npm link && c3merge install
-# in their clone of the project
-c3merge init
+npm install -g @skymen75/c3merge   # on their machine
+c3merge init             # in their clone of the project
 ```
 
 Someone who hasn't installed c3merge isn't blocked. Git silently ignores `merge=c3` when
@@ -147,7 +142,7 @@ conflicts, merge locally (for example, merge `main` into the branch), where c3me
 ```sh
 git config --global --remove-section merge.c3
 git config --global --remove-section merge.ours   # only if nothing else of yours uses merge=ours
-npm unlink -g c3merge
+npm uninstall -g @skymen75/c3merge
 ```
 
 In each project, delete the block between `# c3merge begin` and `# c3merge end` from
@@ -165,7 +160,7 @@ and `.git/hooks/post-rewrite`.
 - **Markers labelled `<<<<<<< HEAD` / `>>>>>>> branch-name`, and no `c3merge:` line in
   the output.** Those are git's own line merge: the driver didn't run, for example because
   the Node version it recorded was removed. c3merge's markers say `ours` and `theirs`.
-  Run `c3merge doctor`, then `c3merge install`, and redo the merge (`git merge --abort`,
-  then merge again).
+  Run `c3merge doctor`, then `c3merge install` (or `npm install -g @skymen75/c3merge` again), and
+  redo the merge (`git merge --abort`, then merge again).
 - **Where did the messages go?** Git GUIs don't always show what the driver prints. The
   same text is always in `.git/c3merge/conflicts.md`, which starts over at each merge.

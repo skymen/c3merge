@@ -86,16 +86,14 @@ each addon's list of actions and conditions.
 
 ## In CI
 
-`check` itself needs no editor and no network: Node and a checkout are enough. For example, in
-a GitHub Actions workflow:
+`check` needs no editor and no git setup, so `npx` is fine here. For example, in a GitHub
+Actions workflow:
 
 ```yaml
+- uses: actions/checkout@v4
 - uses: actions/setup-node@v4
   with: { node-version: 22 }
-- run: |
-    git clone --depth 1 <c3merge repository> /tmp/c3merge
-    cd /tmp/c3merge && npm install && npm run build
-- run: node /tmp/c3merge/bin/c3merge.js check game --github
+- run: npx @skymen75/c3merge check game --github
 ```
 
 Errors show up as annotations on the pull request, and the job fails.

@@ -1,7 +1,7 @@
 // Git integration: the merge driver git calls for each file, and the commands that set it
 // up (install, init, doctor). See tasks/git-driver.md.
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { driverContext } from "./context.ts";
 import { mergeFile, ParseError, type Issue } from "./engine/merge.ts";
@@ -117,6 +117,14 @@ export function c3mergeCommand(): string {
 }
 export const driverCommand = () => `${c3mergeCommand()} merge-driver %O %A %B %P`;
 
+// npx runs c3merge from its cache (~/.npm/_npx/…), which npm cleans up: git and the hooks
+// would be left calling a path that's gone.
+export function runningFromNpx(): boolean {
+  let script = process.argv[1] ?? "";
+  try { script = realpathSync(script); } catch {}
+  return script.split(/[\\/]/).includes("_npx");
+}
+
 export function install(opts: { local?: boolean; command?: string }): string[] {
   const scope = opts.local ? "--local" : "--global";
   const set: [string, string][] = [
@@ -134,7 +142,7 @@ export function install(opts: { local?: boolean; command?: string }): string[] {
 }
 
 const BEGIN = "# c3merge begin", END = "# c3merge end";
-export const ATTRIBUTES = `${BEGIN}: structural merges of Construct 3 projects (https://github.com/skymen/c3merge)
+export const ATTRIBUTES = `${BEGIN}: structural merges of Construct 3 projects (https://www.npmjs.com/package/@skymen75/c3merge)
 *.c3proj                  merge=c3
 **/eventSheets/**/*.json  merge=c3
 **/layouts/**/*.json      merge=c3

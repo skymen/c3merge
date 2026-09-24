@@ -14,6 +14,7 @@ packaging/release · `[docs]`
 
 ## Now
 
+- [dist] Publish `@skymen75/c3merge` 0.1.0 once `@skymen75/c3cli` is live: switch the devDependency `c3cli` from `file:../c3cli` to `npm:@skymen75/c3cli@^0.1.0` (an alias, so `from "c3cli"` imports stay), `npm install` to refresh the lock, then `npm publish` (it refuses while a `file:` dependency is left) ([tasks/dist.md](tasks/dist.md))
 
 ## Normal
 
@@ -30,7 +31,7 @@ packaging/release · `[docs]`
 - [check] Repair mode: `check --fix` for the classes C3 does *not* repair itself (dedupe sids, drop dangling references with a report)
 - [driver] `git rebase` / `cherry-pick` / `stash pop` behavior: verify driver fires and collision log is still reachable
 - [driver] Binary assets (PNG, audio) stay ordinary git conflicts — document, don't try to merge
-- [dist] npm package, Homebrew tap, gh extension binaries per OS, version scheme tracking C3 releases (`savedWithRelease`) ([tasks/dist.md](tasks/dist.md))
+- [dist] Homebrew tap, gh extension binaries per OS, version scheme tracking C3 releases (`savedWithRelease`) ([tasks/dist.md](tasks/dist.md))
 - [action] GitLab CI equivalent (only if asked)
 - [driver] `c3merge resolve <file> --ours|--theirs`: take one side of every hunk in a file (`takeSide` exists)
 

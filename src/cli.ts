@@ -3,12 +3,17 @@
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { checkProject, invariants, severityOf } from "./check/index.ts";
-import { c3mergeCommand, doctor, HOOKS, init, install, installHooks, mergeDriver } from "./driver.ts";
+import { c3mergeCommand, doctor, HOOKS, init, install, installHooks, mergeDriver, runningFromNpx } from "./driver.ts";
 import { describe, finishWithCheck } from "./finish.ts";
 
 const [command, ...rest] = process.argv.slice(2);
 
 async function main(): Promise<number> {
+  // Both write c3merge's own path into git config or hooks.
+  if ((command === "install" || command === "init") && runningFromNpx()) {
+    console.error(`c3merge ${command}: npx runs c3merge from a temporary cache that npm cleans up, and git would keep calling it there. Install it instead:\n  npm install -g @skymen75/c3merge`);
+    return 2;
+  }
   if (command === "check") {
     const { values, positionals } = parseArgs({
       args: rest, allowPositionals: true,

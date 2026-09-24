@@ -37,22 +37,18 @@ left out of these numbers, on both sides.
 
 ## Install
 
-You need **Node 22+** and **git** (2.44+ recommended). c3merge isn't on npm yet, so install
-it from a checkout:
+You need **Node 22+** and **git** (2.44+ recommended).
 
 ```sh
-git clone <c3merge repository> c3merge
-cd c3merge
-npm install
-npm run build
-npm link                 # puts `c3merge` on your PATH
+npm install -g @skymen75/c3merge
 ```
 
-Then set up git on this machine (once):
+This also sets up git on your machine: it adds the merge driver to `~/.gitconfig`. With
+another package manager, or with `--ignore-scripts`, run `c3merge install` yourself once.
 
-```sh
-c3merge install          # writes the driver to ~/.gitconfig (use --local for one repo only)
-```
+Install it globally rather than running it through `npx`. Git keeps calling c3merge at the
+path it was set up with, and npx's cache gets cleaned up. `c3merge install` and
+`c3merge init` refuse to run from npx.
 
 ## Add it to a Construct 3 project
 
@@ -67,9 +63,9 @@ git commit -m "Merge Construct 3 files with c3merge"
 c3merge doctor           # checks the setup
 ```
 
-Every teammate runs `c3merge install` once on their machine and `c3merge init` once in
-their clone. A teammate without c3merge is unaffected: git ignores the attributes and
-merges as usual.
+Every teammate runs `npm install -g @skymen75/c3merge` once on their machine and `c3merge init`
+once in their clone. A teammate without c3merge is unaffected: git ignores the attributes
+and merges as usual.
 
 The full guide, including GUI git clients, existing hooks, removal and troubleshooting,
 is in [docs/install.md](docs/install.md).
@@ -144,8 +140,11 @@ button, which never runs merge drivers, so resolve locally.
 ## Development
 
 ```sh
+git clone <this repository> && cd c3merge
+npm install
 npm test                 # engine, expressions, driver (real git merges in temp repos), check
 npm run build
+npm link                 # use this checkout as the global `c3merge` (sets up git like a global install)
 ```
 
 Scripts in `scripts/` replay a real project's history against the engine. They are

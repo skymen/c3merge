@@ -144,6 +144,11 @@ and exits 0 when merged, 1 on conflicts. Conflicts and warnings go to stderr and
 folders (`files/`, `scripts/`) gets `git merge-file` first, with the histogram diff like
 `git merge`, and the structural merge only if that conflicts or isn't valid JSON.
 
+`c3merge install` records the absolute paths of Node and of c3merge, so git GUIs without a
+PATH still find it. A global npm install runs it from `bin/postinstall.js`; local installs
+and npx don't. `install` and `init` refuse to run from npx's cache, since git would keep
+calling a path npm later deletes.
+
 `finish` runs after the merge from the `post-index-change` hook (with `1` and `GITHEAD_*`
 set, which only a merge writing its result has) and from `post-rewrite` after a rebase:
 - it compares names by sid between the merge base and the files on disk;
