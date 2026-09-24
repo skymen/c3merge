@@ -33,7 +33,6 @@ packaging/release · `[docs]`
 - [dist] npm package, Homebrew tap, gh extension binaries per OS, version scheme tracking C3 releases (`savedWithRelease`) ([tasks/dist.md](tasks/dist.md))
 - [action] GitLab CI equivalent (only if asked)
 - [driver] `c3merge resolve <file> --ours|--theirs`: take one side of every hunk in a file (`takeSide` exists)
-- [docs] README: install in 2 commands, what it does/doesn't merge, how to read the collision log
 
 ## Ideas
 

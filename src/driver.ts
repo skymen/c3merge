@@ -197,9 +197,10 @@ export function doctor(cwd = process.cwd()): DoctorLine[] {
   const driver = tryGit(["config", "--get", "merge.c3.driver"], cwd);
   if (!driver) out.push({ ok: false, text: "merge driver not configured", fix: "c3merge install" });
   else {
-    const script = /'([^']+)' merge-driver/.exec(driver)?.[1];
-    const exists = !script || existsSync(script);
-    out.push(exists ? { ok: true, text: `merge driver: ${driver}` } : { ok: false, text: `merge driver points at a missing file: ${script}`, fix: "c3merge install" });
+    // Node and the script, as `install` wrote them (a removed Node version, a moved checkout).
+    const paths = [...driver.split(" merge-driver")[0].matchAll(/'([^']+)'/g)].map((m) => m[1]).filter((p) => path.isAbsolute(p));
+    const missing = paths.find((p) => !existsSync(p));
+    out.push(!missing ? { ok: true, text: `merge driver: ${driver}` } : { ok: false, text: `merge driver points at a missing file: ${missing}`, fix: "c3merge install" });
   }
   const root = tryGit(["rev-parse", "--show-toplevel"], cwd);
   if (!root) { out.push({ ok: false, text: "not inside a git repository" }); return out; }
