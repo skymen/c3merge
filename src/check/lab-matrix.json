@@ -333,7 +333,7 @@
 	},
 	{
 		"row": "29",
-		"title": "tilemap tile data truncated",
+		"title": "tilemap data has a malformed run",
 		"release": "r449-5",
 		"editor": "refuses",
 		"present": null,
@@ -343,6 +343,39 @@
 		"cause": "TypeError: expected finite number"
 	},
 	{
+		"row": "29b",
+		"title": "tilemap data shorter than its stored grid",
+		"release": "r449-5",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "29c",
+		"title": "tilemap keeps hidden cells (grid 40×40, 30×30 shows) and a flipped tile",
+		"release": "r449-5",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "29d",
+		"title": "tilemap stored grid narrower than its size (max-width < width)",
+		"release": "r449-5",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
 		"row": "30",
 		"title": "timeline references deleted instance uid",
 		"release": "r449-5",
@@ -764,12 +797,45 @@
 	},
 	{
 		"row": "29",
-		"title": "tilemap tile data truncated",
+		"title": "tilemap data has a malformed run",
 		"release": "r495-2",
 		"editor": "repairs silently",
 		"present": false,
 		"dropped": [],
 		"previewStarts": false,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "29b",
+		"title": "tilemap data shorter than its stored grid",
+		"release": "r495-2",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "29c",
+		"title": "tilemap keeps hidden cells (grid 40×40, 30×30 shows) and a flipped tile",
+		"release": "r495-2",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "29d",
+		"title": "tilemap stored grid narrower than its size (max-width < width)",
+		"release": "r495-2",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
 		"previewErrors": false,
 		"cause": ""
 	},
@@ -1195,12 +1261,45 @@
 	},
 	{
 		"row": "29",
-		"title": "tilemap tile data truncated",
+		"title": "tilemap data has a malformed run",
 		"release": "r503",
 		"editor": "repairs silently",
 		"present": false,
 		"dropped": [],
 		"previewStarts": false,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "29b",
+		"title": "tilemap data shorter than its stored grid",
+		"release": "r503",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "29c",
+		"title": "tilemap keeps hidden cells (grid 40×40, 30×30 shows) and a flipped tile",
+		"release": "r503",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "29d",
+		"title": "tilemap stored grid narrower than its size (max-width < width)",
+		"release": "r503",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
 		"previewErrors": false,
 		"cause": ""
 	},

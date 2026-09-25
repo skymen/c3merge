@@ -14,7 +14,7 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [dist] Publish `@skymen75/c3merge` 0.1.0: ready (`npm publish`). `@skymen75/c3cli` 0.1.0 is live (2026-09-24) and the devDependency now points at it (`npm:@skymen75/c3cli@^0.1.0`) ([tasks/dist.md](tasks/dist.md))
+- [dist] Publish `@skymen75/c3merge` 0.2.0: ready (`npm publish`). 0.1.0 and `@skymen75/c3cli` 0.1.0 are live (2026-09-24); the devDependency points at c3cli (`npm:@skymen75/c3cli@^0.1.0`) ([tasks/dist.md](tasks/dist.md))
 
 ## Normal
 
@@ -24,10 +24,10 @@ packaging/release · `[docs]`
 - [gh] `gh extension install skymen/gh-c3merge`, `gh c3merge install|init|doctor|check` ([tasks/gh-extension.md](tasks/gh-extension.md))
 - [corpus] Golden tests: for every fixture triple, expected merged output + expected collision list; run in CI ([tasks/test-corpus.md](tasks/test-corpus.md#golden-tests))
 - [core] Renames carried across sides: when a renamed type's old name is reused on the same side (`X → Y` and `Z → X`), the other side's new `X` references are ambiguous → make it a conflict (skymen, 2026-09-24). Signature changes adapt calls neither side touched (a stale extra argument dropped): maybe warn
+- [core] Float noise: both sides change a size/origin to values < 0.001 apart (C3 recomputing in floating point) → same change, take either. Prototype on a current-release history: conflicts 162 → 90, 0 clean results changed
 - [corpus] `extract-triples` stores every triple on disk (3.2 GB for UTRS's 103 merges); a big history doesn't fit. A streaming `scan` + `replay` (one JSON line per file) exists in the older-format run's local folder: move it into `scripts/`
 
 ## Later
-
 
 - [profiles] Script events that store their code as one string (`"script": "…\n…"`) should get the line merge too; key timeline tracks by what they animate ([tasks/profiles.md](tasks/profiles.md#later))
 - [check] Repair mode: `check --fix` for the classes C3 does *not* repair itself (dedupe sids, drop dangling references with a report)

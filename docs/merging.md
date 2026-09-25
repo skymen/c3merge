@@ -159,9 +159,27 @@ JavaScript, images and other files there are merged by git as usual. JSON files 
 merge when it's clean and still valid JSON. Otherwise c3merge merges them as plain JSON
 objects and lists.
 
+### Tilemaps
+A tilemap painted on both sides is merged tile by tile: tiles painted on one side only are
+kept, flips included, and so are tiles both sides painted the same way. It still merges
+when one side resized the tilemap (added rows or columns, or shrank it) and the other
+painted it.
+
+**Conflict** when:
+- the same tile was painted differently on each side. The marker's two versions both hold
+  every other tile already merged, so taking either side keeps the rest of both sides'
+  painting. The conflict names the tiles: "2 tiles changed differently on both sides at
+  (34, 9), (35, 10)".
+- each side resized the tilemap differently.
+- one side painted tiles where the other side's resize hides them.
+
+C3 also saves cells a tilemap doesn't show (left by shrinking it, or by growing it after a
+shrink). They're merged like the rest, but never make a conflict. Releases after r449 (the
+LTS) drop them when they load a tilemap (r495 does); r449 keeps them.
+
 ### Opaque data
-Tilemap data and other values that only make sense as a whole, such as mesh points, colour
-arrays and timeline keyframes, are one value: **conflict** when both sides changed them.
+Values that only make sense as a whole, such as mesh points, colour arrays and timeline
+keyframes, are one value: **conflict** when both sides changed them.
 The same goes for addon versions changed on both sides.
 
 ### Invalid JSON

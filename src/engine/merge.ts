@@ -8,6 +8,7 @@ import { mergeLines } from "./lines.ts";
 import { reconcileMoves, type ForcedConflict } from "./moves.ts";
 import { aceLabel, applyRenames, flagLeftovers } from "./renames.ts";
 import { detectStyle, render } from "./render.ts";
+import { mergeTilemap } from "./tiles.ts";
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 export const ABSENT: unique symbol = Symbol("absent");
@@ -118,7 +119,8 @@ class Merger {
     if (eq(b, t)) return o;
     const rule = ruleFor(this.profile, pattern);
     if (rule && "scalar" in rule && typeof o === "number" && typeof t === "number") return Math.max(o, t);
-    if (!(rule && "atomic" in rule)) {
+    if (rule && "tiles" in rule && b !== ABSENT && o !== ABSENT && t !== ABSENT) return this.mergeTiles(b, o, t, path, where);
+    if (!(rule && ("atomic" in rule || "tiles" in rule))) {
       if (isObj(o) && isObj(t) && (isObj(b) || b === ABSENT)) return this.mergeObject(b === ABSENT ? {} : b, o, t, path, pattern, where);
       if (Array.isArray(o) && Array.isArray(t) && (Array.isArray(b) || b === ABSENT)) {
         const r = this.mergeList(b === ABSENT ? [] : b, o, t, path, pattern, where);
@@ -156,9 +158,21 @@ class Merger {
   // null: can't be merged element by element, the caller makes it one conflict.
   private mergeList(b: Json[], o: Json[], t: Json[], path: string, pattern: string, where: string): unknown[] | null {
     const rule: Rule | undefined = ruleFor(this.profile, `${pattern}[]`) ?? defaultRule(b, o, t);
-    if (!rule || "atomic" in rule || "scalar" in rule) return null;
+    if (!rule || "atomic" in rule || "scalar" in rule || "tiles" in rule) return null;
     if ("lines" in rule) return this.mergeLineList(b, o, t, path, where);
     return this.mergeKeyed(b, o, t, rule, path, pattern, where);
+  }
+
+  // A tilemap painted on both sides: tile by tile (tiles.ts). Tiles changed differently on
+  // both sides make one conflict whose two versions have every other tile merged, so taking
+  // either keeps the rest of both sides' painting.
+  private mergeTiles(b: Json, o: Json, t: Json, path: string, where: string) {
+    const r = mergeTilemap(b, o, t);
+    if ("merged" in r) return r.merged;
+    if ("conflict" in r) { this.conflict(path, where, r.conflict); return new Conflict(o, t); }
+    const n = r.clashes, shown = r.first.map(([x, y]) => `(${x}, ${y})`).join(", ");
+    this.conflict(path, where, `${n} tile${n === 1 ? "" : "s"} changed differently on both sides at ${shown}${n > 5 ? ", …" : ""}; both versions have every other tile merged`);
+    return new Conflict(r.ours, r.theirs);
   }
 
   private mergeLineList(b: Json[], o: Json[], t: Json[], path: string, where: string) {

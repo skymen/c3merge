@@ -58,7 +58,9 @@ Generic keyed 3-way merge over JSON values, driven by a **profile** chosen from 
   Sprite#50, Sprite#60"). Exception: both sides *replaced* the same element (deleted it and
   inserted something different in its place) → conflict, since keeping both changes the
   logic, not just the order.
-- opaque values (tile data, mesh data): changed on both sides → conflict, never elementwise.
+- opaque values (mesh data, keyframes): changed on both sides → conflict, never elementwise.
+  Tilemap data is the exception: each tile has a position, so it's merged tile by tile
+  (decided 2026-09-25, skymen; tasks/profiles.md "Tilemaps").
 - two surviving elements with the same identity or name → conflict.
 
 **(decided 2026-09-23, skymen)** Renames and C3's automatic changes use the whole project

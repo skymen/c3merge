@@ -2,7 +2,8 @@
 
 **Status:** all 39 rows (35 + variants) measured on r449-5 (LTS), r495-2 (stable) and r503
 (beta), 2026-09-23; rows 35/35b (duplicate group names) added 2026-09-24, the other 111
-verdicts unchanged on that re-run. Only rows 19 and 29 differ between releases. Harness
+verdicts unchanged on that re-run; row 29 split into 29–29d (tilemap data) 2026-09-25.
+Only rows 19, 29 and 29c differ between releases. Harness
 in `lab/` (`npm run lab -- [--releases stable,beta] [--rows …]`), results in
 [reports/lab-matrix.md](../reports/lab-matrix.md), severities in
 [check-validator.md](check-validator.md).
@@ -38,6 +39,15 @@ stable and beta run now opens an r449 project.
   (`lab/out/uid-experiment/`, all three releases): C3 keeps both instances unchanged and gives
   the one it loads first a free uid; the one loaded last keeps the uid, so a timeline or
   anything else pointing at that uid follows the later instance. Also with no instance sid.
+- Tilemap data (rows 29–29d, 2026-09-25; tasks/profiles.md "Tilemaps"): the old row 29 cut
+  the data in half, leaving a malformed run (`2x`), which is what r449-5 refuses; data that
+  is only short loads with empty cells on every release (29b). A stored grid larger than what
+  shows, the normal state of real tilemaps (29c): r449-5 keeps it through preview and Save
+  as, r495-2 and r503 trim it to what shows once a preview has read the tilemap. A kept
+  grid smaller than what shows (29d): kept as is everywhere. Checked further in the editor
+  with c3cli (`lab/out/tilemap-experiment/`, r449-5 and r500): the preview's `getTileAt`
+  matches the column-by-column reading, r500 saves an unread tilemap's hidden cells
+  untouched, and a tile-merged layout opens and shows both sides' tiles, flips included.
 - Duplicate group names (rows 35, 35b): opened and saved without a word, preview runs. The
   runtime keys groups by lowercased name (r500 `eventSheetManager`), so "Set group active" by
   name reaches only one of them.
@@ -93,7 +103,7 @@ stable and beta run now opens an r449 project.
 | 26 | key order changed / tabs→spaces / CRLF (does C3 rewrite on save? which parts?) | | | |
 | 27 | unknown extra key at top level / inside an event | | | |
 | 28 | required key missing (e.g. instance `world`) | | | |
-| 29 | `tileData` truncated | | | |
+| 29 | tilemap data: malformed run / short (29b) / hidden cells (29c) / stored grid smaller than the size (29d) | | | |
 | 30 | timeline references deleted instance uid | | | |
 | 31 | hierarchy child references missing uid | | | |
 | 32 | global variable name duplicated | | | |

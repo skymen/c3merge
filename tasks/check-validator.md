@@ -47,9 +47,10 @@ console). `check` has to catch these, because the user sees nothing useful.
   file but loses its list entry makes content vanish.
 
 **error: loads in the editor, fails at runtime**
-- tilemap `tilemapData.data` inconsistent with width × height: r495+ open it but the
-  preview doesn't start ("Failed to start preview", `expected finite number`); r449
-  refuses to open it with the same error, row 29.
+- tilemap data with a malformed run (`67x`): r495+ open it but the preview doesn't start
+  ("Failed to start preview", `expected finite number`); r449 refuses to open it with the
+  same error, row 29 (`tilemap-data-runs`). The first version of this row cut the data in
+  half, which left a malformed run; data that is merely short is row 29b.
 
 **warning: C3 keeps it as-is (loads, previews, and writes it back unchanged)**
 - event `sid` duplicated, row 4: Save as writes both events with the same sid.
@@ -58,6 +59,9 @@ console). `check` has to catch these, because the user sees nothing useful.
 - two effects with the same name on one type, row 34 (preview runs; instances key effect
   settings by name, so one set is ambiguous).
 - empty event block (0 conditions, 0 actions), row 33. Probably harmless: info at most.
+- tilemap stored grid (max-width × max-height) smaller than its size, row 29d
+  (`tilemap-grid-size`): all three releases open, preview and save it as is; the columns
+  past the stored grid show nothing.
 
 **none: C3 repairs it, don't check**
 - instance `uid` duplicated within a layout or across layouts, rows 2 and 3: C3 renumbers
@@ -67,6 +71,10 @@ console). `check` has to catch these, because the user sees nothing useful.
 - `savedWithRelease` older than the editor: every stable and beta run opens the
   r449-saved lab-base, which upgrades normally (row 21 dropped).
 - instance missing a variable its type declares, row 15: added back with the default.
+- tilemap data shorter than its stored grid, row 29b (`tilemap-data-size`): the missing cells
+  load empty. Hidden cells (a stored grid larger than what shows) aren't a finding at all:
+  83% of real tilemaps have them (tasks/profiles.md "Tilemaps"); row 29c records that
+  r449-5 keeps them and r495-2/r503 drop them.
 - hierarchy parent listing a child uid that doesn't exist, or a child whose `parent-uid`
   doesn't exist, rows 31 and 31b: the dangling link is dropped.
 - `usedAddons` missing an addon, or a wrong version/bundled flag, rows 18 and 19: rebuilt

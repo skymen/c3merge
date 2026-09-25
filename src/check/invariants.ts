@@ -1,6 +1,7 @@
 // Cross-file invariants of a C3 project. Each one is defined by what it means (a dangling
 // reference, a duplicate id…), never by release, and names the lab rows that measured
 // what C3 does when it's broken; severity comes from that data (severity.ts).
+import { tileRuns } from "../engine/tiles.ts";
 import type { Project } from "../model/project.ts";
 
 export interface Finding { invariant: string; file: string; message: string }
@@ -45,18 +46,6 @@ function duplicates<T>(xs: T[]): Set<T> {
 // Families a type belongs to, for variables/effects/behaviors inherited from a family.
 function familiesOf(p: Project, typeName: string): Json[] {
   return p.items("families").map((f) => f.json).filter((f) => (f.members ?? []).includes(typeName));
-}
-
-// Tilemap data is run-length encoded: "67x0,13,3x23" = 67 zeros, 13, three 23s.
-export function tileCount(data: string): number {
-  let n = 0;
-  for (const run of data.split(",")) {
-    if (run === "") continue;
-    const m = /^(?:(\d+)x)?(-?\d+)$/.exec(run);
-    if (!m) return NaN;
-    n += m[1] ? Number(m[1]) : 1;
-  }
-  return n;
 }
 
 // ---------- the invariants ----------
@@ -240,12 +229,32 @@ export const invariants: Invariant[] = [
       .map((n) => ({ invariant: "layer-name-unique", file: l.rel, message: `layer name "${n}" is used more than once` }))),
   },
   {
-    id: "tilemap-data-size", title: "tilemap data matches the tilemap's size", labRows: ["29"],
+    id: "tilemap-data-runs", title: "tilemap data runs are well-formed", labRows: ["29"],
+    check: (p) => instances(p).flatMap(({ file, inst }) => {
+      const t = inst.ownData?.tilemapData;
+      const bad = typeof t?.data === "string" ? t.data.split(",").find((run: string) => !tileRuns(run)) : undefined;
+      return bad === undefined ? [] : [{ invariant: "tilemap-data-runs", file, message: `tilemap uid ${inst.uid}: malformed run "${bad}" in its data` }];
+    }),
+  },
+  {
+    // C3 stores max-width × max-height cells, usually more than width × height shows (tiles.ts).
+    // Missing cells load empty and extra ones are ignored (lab row 29b).
+    id: "tilemap-data-size", title: "tilemap data covers its stored grid (max-width × max-height)", labRows: ["29b"],
+    check: (p) => instances(p).flatMap(({ file, inst }) => {
+      const t = inst.ownData?.tilemapData;
+      const runs = typeof t?.data === "string" ? tileRuns(t.data) : null;
+      if (!runs) return [];
+      const mw = t["max-width"] ?? t.width, mh = t["max-height"] ?? t.height, n = runs.reduce((a, r) => a + r.count, 0);
+      return n === mw * mh ? [] : [{ invariant: "tilemap-data-size", file, message: `tilemap uid ${inst.uid}: data has ${n} cells, its stored grid ${mw}×${mh} has ${mw * mh}` }];
+    }),
+  },
+  {
+    id: "tilemap-grid-size", title: "a tilemap's stored grid is at least its size", labRows: ["29d"],
     check: (p) => instances(p).flatMap(({ file, inst }) => {
       const t = inst.ownData?.tilemapData;
       if (!t || typeof t.data !== "string") return [];
-      const n = tileCount(t.data);
-      return n === t.width * t.height ? [] : [{ invariant: "tilemap-data-size", file, message: `tilemap uid ${inst.uid}: data has ${Number.isNaN(n) ? "malformed runs" : `${n} tiles`}, expected ${t.width}×${t.height} = ${t.width * t.height}` }];
+      const mw = t["max-width"] ?? t.width, mh = t["max-height"] ?? t.height;
+      return mw >= t.width && mh >= t.height ? [] : [{ invariant: "tilemap-grid-size", file, message: `tilemap uid ${inst.uid}: stored grid ${mw}×${mh} is smaller than its size ${t.width}×${t.height}` }];
     }),
   },
   {

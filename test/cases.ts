@@ -659,23 +659,77 @@ export const CASES: Case[] = [
   },
 
   // ── opaque data ─────────────────────────────────────────────────────────────────────
+  // Tilemap data: column by column over max-width × max-height (cell x·max-height + y), run-
+  // length encoded; "0" empty, n = tile n−1, h/v/d = flipped. The lab base tilemap is 30×30.
   {
-    name: "tilemap painted on both sides",
+    name: "tilemap painted on both sides, the same tiles differently",
     file: L2,
+    base: (v) => { tilemap(v).data = "900x0"; },
     ours: (v) => { tilemap(v).data = "900x1"; },
     theirs: (v) => { tilemap(v).data = "900x2"; },
     conflicts: [`${layerPath(L2)}.instances[uid=6].ownData.tilemapData`],
     takeOurs: (v) => { tilemap(v).data = "900x1"; }, takeTheirs: (v) => { tilemap(v).data = "900x2"; },
   },
   {
-    // width/height/data only make sense together: never merge them key by key.
-    name: "tilemap resized on one side, painted on the other",
+    name: "tilemap painted on both sides, different tiles",
+    file: L2,
+    base: (v) => { tilemap(v).data = "900x0"; },
+    ours: (v) => { tilemap(v).data = "5,899x0"; }, // (0, 0)
+    theirs: (v) => { tilemap(v).data = "899x0,7hv"; }, // (29, 29), flipped
+    merged: (v) => { tilemap(v).data = "5,898x0,7hv"; },
+  },
+  {
+    // Both versions of the conflict keep the tile only one side painted.
+    name: "tilemap: one tile painted differently on both sides",
+    file: L2,
+    base: (v) => { tilemap(v).data = "900x0"; },
+    ours: (v) => { tilemap(v).data = "5,898x0,3"; },
+    theirs: (v) => { tilemap(v).data = "6,899x0"; },
+    conflicts: [`${layerPath(L2)}.instances[uid=6].ownData.tilemapData`],
+    takeOurs: (v) => { tilemap(v).data = "5,898x0,3"; }, takeTheirs: (v) => { tilemap(v).data = "6,898x0,3"; },
+  },
+  {
+    name: "tilemap widened on one side, painted on the other",
+    file: L2,
+    ours: (v) => { Object.assign(tilemap(v), { width: 31, "max-width": 31, data: `${tilemap(v).data},30x0` }); },
+    theirs: (v) => { tilemap(v).data = "900x2"; },
+    merged: (v) => { Object.assign(tilemap(v), { width: 31, "max-width": 31, data: "900x2,30x0" }); },
+  },
+  {
+    // A row more: every column gets a cell, so every tile after the first column moves in `data`.
+    name: "tilemap made taller on one side, painted on the other",
+    file: L2,
+    base: (v) => { tilemap(v).data = "900x0"; },
+    ours: (v) => { Object.assign(tilemap(v), { height: 31, "max-height": 31, data: "930x0" }); },
+    theirs: (v) => { tilemap(v).data = "30x0,4,869x0"; }, // (1, 0)
+    merged: (v) => { Object.assign(tilemap(v), { height: 31, "max-height": 31, data: "31x0,4,898x0" }); },
+  },
+  {
+    // r495+ drops cells outside width × height when it loads a tilemap.
+    name: "tilemap: hidden cells dropped on one side, painted on the other",
+    file: L2,
+    base: (v) => { Object.assign(tilemap(v), { width: 20, data: "750x0,9,149x0" }); }, // hidden (25, 0)
+    ours: (v) => { Object.assign(tilemap(v), { "max-width": 20, data: "600x0" }); },
+    theirs: (v) => { tilemap(v).data = "5,749x0,9,149x0"; },
+    merged: (v) => { Object.assign(tilemap(v), { width: 20, "max-width": 20, data: "5,599x0" }); },
+  },
+  {
+    name: "tilemap narrowed on one side, painted where it narrowed on the other",
+    file: L2,
+    base: (v) => { tilemap(v).data = "900x0"; },
+    ours: (v) => { tilemap(v).width = 20; },
+    theirs: (v) => { tilemap(v).data = "750x0,9,149x0"; }, // (25, 0)
+    conflicts: [`${layerPath(L2)}.instances[uid=6].ownData.tilemapData`],
+    takeOurs: (v) => { tilemap(v).width = 20; }, takeTheirs: (v) => { tilemap(v).data = "750x0,9,149x0"; },
+  },
+  {
+    name: "tilemap resized differently on both sides",
     file: L2,
     ours: (v) => { Object.assign(tilemap(v), { width: 31, "max-width": 31 }); },
-    theirs: (v) => { tilemap(v).data = "900x2"; },
+    theirs: (v) => { Object.assign(tilemap(v), { width: 32, "max-width": 32 }); },
     conflicts: [`${layerPath(L2)}.instances[uid=6].ownData.tilemapData`],
     takeOurs: (v) => { Object.assign(tilemap(v), { width: 31, "max-width": 31 }); },
-    takeTheirs: (v) => { tilemap(v).data = "900x2"; },
+    takeTheirs: (v) => { Object.assign(tilemap(v), { width: 32, "max-width": 32 }); },
   },
   {
     name: "tilemap painted on one side only",

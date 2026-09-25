@@ -1,6 +1,6 @@
 {
   "name": "@skymen75/c3merge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Git merge driver and validator for Construct 3 projects: merges what git can't, flags only real conflicts, follows renames",
   "keywords": [
     "construct3",

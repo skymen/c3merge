@@ -1,13 +1,14 @@
 # Distribution / releases
 
-**Status:** `@skymen75/c3cli` 0.1.0 published (2026-09-24); `@skymen75/c3merge` 0.1.0 ready to
-publish (dry run passes). The other channels aren't started.
+**Status:** `@skymen75/c3cli` 0.1.0 and `@skymen75/c3merge` 0.1.0 published (2026-09-24);
+c3merge 0.2.0 (identical comments, duplicate group names, tilemaps tile by tile, tilemap
+checks fixed) ready to publish, 2026-09-25. The other channels aren't started.
 
 ## npm (2026-09-24)
 - Names: `@skymen75/c3cli` and `@skymen75/c3merge`. npm refused the unscoped `c3cli` as too
   similar to `cli` and `cp-cli` (2026-09-24); the commands are still `c3cli` and `c3merge`.
   `publishConfig.access` is `public`, which scoped packages need.
-- Both packages are MIT and version 0.1.0. They ship only `dist`, `bin`, `docs`, README
+- Both packages are MIT; c3cli is 0.1.0, c3merge 0.2.0. They ship only `dist`, `bin`, `docs`, README
   and LICENSE (`files`). `prepublishOnly` runs the tests and the build.
 - c3merge's `postinstall` (`bin/postinstall.js`) runs `c3merge install` on a **global** npm
   install only (`npm_config_global`). Local installs and npx don't touch git config. It

@@ -3,6 +3,7 @@
 // project yet are skipped with that reason.
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { encodeTiles, tileRuns } from "../src/engine/tiles.ts";
 
 export interface Corruption {
   row: string;
@@ -43,6 +44,8 @@ const ES2 = "eventSheets/Event sheet 2.json";
 const C3PROJ = "project.c3proj";
 
 const inst = (layout: Json, type: string) => layout.layers.flatMap((l: Json) => l.instances).find((i: Json) => i.type === type);
+const tilemap = (layout: Json) => inst(layout, "Tilemap").ownData.tilemapData;
+const tileCells = (data: string) => tileRuns(data)!.flatMap((r) => Array<string>(r.count).fill(r.tile));
 const findEvent = (events: Json[], pred: (e: Json) => boolean): Json | undefined => {
   for (const e of events ?? []) {
     if (pred(e)) return e;
@@ -164,9 +167,26 @@ export const corruptions: Corruption[] = [
     apply: (d) => editJson(d, ES2, (s) => { findEvent(s.events, (e) => e.eventType === "block")!.c3mergeExtra = true; }) },
   { row: "28", title: "required key missing (instance `world`)",
     apply: (d) => editJson(d, L1, (l) => { delete inst(l, "Sprite").world; }) },
-  { row: "29", title: "tilemap tile data truncated",
-    present: async (d) => { const t = inst(await readJson(d, L2), "Tilemap").ownData.tilemapData; const n = t.data.split(",").reduce((a: number, run: string) => a + (run.includes("x") ? Number(run.split("x")[0]) : 1), 0); return n !== t.width * t.height; },
-    apply: (d) => editJson(d, L2, (l) => { const t = inst(l, "Tilemap").ownData.tilemapData; t.data = t.data.slice(0, Math.floor(t.data.length / 2)); }) },
+  // Tilemap data: runs over max-width × max-height cells, column by column (src/engine/tiles.ts).
+  // The base tilemap is 30×30 with no hidden cells.
+  { row: "29", title: "tilemap data has a malformed run",
+    present: async (d) => tileRuns(tilemap(await readJson(d, L2)).data) === null,
+    apply: (d) => editJson(d, L2, (l) => { const t = tilemap(l); t.data = t.data.replace(/^(\d+x)\d+/, "$1"); }) },
+  { row: "29b", title: "tilemap data shorter than its stored grid",
+    present: async (d) => { const t = tilemap(await readJson(d, L2)); return tileCells(t.data).length < t["max-width"] * t["max-height"]; },
+    apply: (d) => editJson(d, L2, (l) => { const t = tilemap(l), runs = t.data.split(","); t.data = runs.slice(0, runs.length >> 1).join(","); }) },
+  { row: "29c", title: "tilemap keeps hidden cells (grid 40×40, 30×30 shows) and a flipped tile",
+    present: async (d) => tilemap(await readJson(d, L2))["max-width"] > 30,
+    apply: (d) => editJson(d, L2, (l) => {
+      const t = tilemap(l), old = tileCells(t.data), first = old.findIndex((c) => c !== "0");
+      old[first] += "hv";
+      const cells: string[] = [];
+      for (let x = 0; x < 40; x++) for (let y = 0; y < 40; y++) cells.push(x < 30 && y < 30 ? old[x * 30 + y] : "5");
+      Object.assign(t, { "max-width": 40, "max-height": 40, data: encodeTiles(cells) });
+    }) },
+  { row: "29d", title: "tilemap stored grid narrower than its size (max-width < width)",
+    present: async (d) => { const t = tilemap(await readJson(d, L2)); return t["max-width"] < t.width; },
+    apply: (d) => editJson(d, L2, (l) => { const t = tilemap(l); Object.assign(t, { "max-width": 20, data: encodeTiles(tileCells(t.data).slice(0, 20 * 30)) }); }) },
   { row: "30", title: "timeline references deleted instance uid",
     needs: async (d) => (await readJson(d, "timelines/Timeline 1.json")).tracks.some((t: Json) => "worldInstance" in t) ? null : "a timeline track animating an instance",
     apply: (d) => editJson(d, "timelines/Timeline 1.json", (t) => { t.tracks.find((x: Json) => "worldInstance" in x).worldInstance = 999999; }),

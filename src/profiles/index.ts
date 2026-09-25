@@ -6,7 +6,8 @@ export type Rule =
   | { id: string[]; also?: string[]; moves?: boolean; repeats?: boolean; order: "ordered" | "set" }
   | { atomic: true }
   | { scalar: "max" }
-  | { lines: true };
+  | { lines: true }
+  | { tiles: true };
 
 export interface Profile { kind: string; rules: Record<string, Rule> }
 

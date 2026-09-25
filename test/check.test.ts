@@ -4,7 +4,7 @@ import { cp, mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { checkProject, invariants } from "../src/check/index.ts";
-import { tileCount } from "../src/check/invariants.ts";
+import { encodeTiles, tileRuns } from "../src/engine/tiles.ts";
 import { corruptions } from "../lab/corruptions.ts";
 
 const BASE = path.resolve(import.meta.dirname, "../fixtures/lab-base");
@@ -34,10 +34,28 @@ for (const c of corruptions) {
   });
 }
 
-test("tile runs count", () => {
-  assert.equal(tileCount("67x0,13,3x23"), 71);
-  assert.equal(tileCount("5"), 1);
-  assert.ok(Number.isNaN(tileCount("3x23,2x")));
+test("tile runs: counts, flip flags, malformed runs, written back as C3 writes them", () => {
+  const cells = (d: string) => tileRuns(d)!.flatMap((r) => Array<string>(r.count).fill(r.tile));
+  assert.equal(cells("67x0,13,3x23").length, 71);
+  assert.deepEqual(cells("2x1hv,11vd,5"), ["1hv", "1hv", "11vd", "5"]);
+  assert.deepEqual(cells("1vh"), ["1hv"]);
+  assert.equal(tileRuns("3x23,2x"), null);
+  assert.equal(tileRuns("3x23,x5"), null);
+  for (const d of ["67x0,13,3x23", "2x1hv,11vd,5,5x0", ""]) assert.equal(encodeTiles(cells(d)), d);
+});
+
+// Hidden cells (max-width × max-height past width × height) and flipped tiles are what real
+// projects hold (83% and 28% of 3,070 tilemaps in 6 projects): not findings.
+test("tilemaps with hidden cells and flipped tiles are fine", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "c3merge-test-"));
+  try {
+    await cp(BASE, dir, { recursive: true });
+    await corruptions.find((c) => c.row === "29c")!.apply(dir);
+    const r = await checkProject(dir, { all: true });
+    assert.deepEqual(r.findings.filter((f) => f.invariant.startsWith("tilemap")), []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 // Real projects that C3 opens must not get errors or warnings. Uses c3cli's local fixture

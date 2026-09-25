@@ -65,17 +65,20 @@ behaviour seen on any of them, since each team member may use a different releas
 | error | `image-id-unique` | animation frame image ids are unique |
 | error | `frame-image-exists` | every animation frame has its image file |
 | error | `layer-name-unique` | layer names are unique within a layout |
-| error | `tilemap-data-size` | tilemap data matches the tilemap's size |
+| error | `tilemap-data-runs` | tilemap data runs are well-formed |
 | error | `timeline-instance-exists` | timeline tracks point to existing instances |
 | warning | `event-sid-unique` | event sids are unique project-wide |
 | warning | `global-var-unique` | global variable names are unique |
 | warning | `effect-name-unique` | effect names are unique per type, family, layer and layout |
+| warning | `group-name-unique` | event group names are unique project-wide, ignoring case ("Set group active" reaches only one) |
+| warning | `tilemap-grid-size` | a tilemap's stored grid (`max-width` × `max-height`) is at least its size |
 | info | `layer-param-exists` | layer names in action parameters exist (layers can be created at runtime) |
 | info | `empty-event` | events have at least one condition or action |
 | none | `instance-uid-unique` | instance uids are unique (C3 renumbers) |
 | none | `event-sid-present` | every event block has a sid (C3 adds one) |
 | none | `instance-vars-complete` | instances have every variable their type declares (C3 adds the default) |
 | none | `hierarchy-links` | hierarchy links point to existing instances (C3 drops the link) |
+| none | `tilemap-data-size` | tilemap data covers its stored grid (missing cells load empty) |
 
 Severities are data (`src/check/lab-matrix.json`), not code. When a new C3 release behaves
 differently, the lab is re-run on it (`npm run lab -- --releases stable,beta,lts`) and the

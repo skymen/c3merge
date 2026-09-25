@@ -46,7 +46,10 @@ src/
      the same base element with different ones: a conflict.
    - Deleted on one side, changed on the other: a conflict, unless the change was only
      automatic (`onlyAutomatic`).
-   - Lists without identity, and `atomic` values such as tilemap data: one value.
+   - Lists without identity, and `atomic` values such as mesh points: one value.
+   - `tiles` (tilemap data, `tiles.ts`): decoded into runs over the stored grid and merged
+     tile by tile, by position; tiles changed differently on both sides make one conflict
+     whose two versions have every other tile merged.
    - `lines` rules (script lines): `mergeLines`, a diff3 line merge.
    - After merging a list: two elements with the same name where every version had
      unique names gives a conflict (`checkDuplicateNames`, `checkDuplicateVariables`).

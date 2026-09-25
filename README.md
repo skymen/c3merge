@@ -99,6 +99,7 @@ Merged automatically:
   are applied to the other side's new instances, events and expressions. Calls are fixed
   the way C3 fixes them when a parameter is added or removed.
 - Script lines, line by line.
+- Tilemaps, tile by tile, including when one side resized the tilemap.
 - Deleted on one side while the other side only has changes C3 made by itself
   (variables added to the object type, new keys from a newer release, a rename).
 
@@ -108,7 +109,8 @@ Always a conflict:
 - The same event element replaced by different ones on each side.
 - Two things created with the same name (two instance variables `hp`, two layers
   `Background`, two event variables `score` in one scope).
-- Tilemap data and other opaque data changed on both sides.
+- The same tile painted differently on both sides, or a tilemap resized differently on
+  each side. Other opaque data (mesh points, timeline keyframes) changed on both sides.
 - An instance moved to different layers on each side.
 - A rename that can't be applied with certainty. The unsure expression is left as it was
   and marked, with the guess next to it.
