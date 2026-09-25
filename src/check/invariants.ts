@@ -288,6 +288,17 @@ export const invariants: Invariant[] = [
     },
   },
   {
+    // The editor refuses a second group with an existing name, but a merge can make one. The
+    // runtime keys groups by lowercased name (r500 eventSheetManager), so "Set group active"
+    // and "Is group active" reach only one of them.
+    id: "group-name-unique", title: "event group names are unique project-wide (ignoring case)", labRows: ["35", "35b"],
+    check: (p) => {
+      const all = p.items("eventSheets").flatMap((s) => allEvents(s.json.events).filter((e) => e.eventType === "group" && typeof e.title === "string").map((g) => ({ file: s.rel, title: g.title as string })));
+      const dup = duplicates(all.map((g) => g.title.toLowerCase()));
+      return all.filter((g) => dup.has(g.title.toLowerCase())).map((g) => ({ invariant: "group-name-unique", file: g.file, message: `group "${g.title}" shares its name with another group` }));
+    },
+  },
+  {
     id: "effect-name-unique", title: "effect names are unique per type, family, layer and layout", labRows: ["34"],
     check: (p) => {
       const owners: { file: string; what: string; effects: Json[] }[] = [

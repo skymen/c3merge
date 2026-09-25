@@ -23,6 +23,8 @@ packaging/release · `[docs]`
 - [action] Reusable workflow: `check` as a PR status + auto-resolve conflicts with the driver + "install c3merge" nudge comment ([tasks/github-action.md](tasks/github-action.md))
 - [gh] `gh extension install skymen/gh-c3merge`, `gh c3merge install|init|doctor|check` ([tasks/gh-extension.md](tasks/gh-extension.md))
 - [corpus] Golden tests: for every fixture triple, expected merged output + expected collision list; run in CI ([tasks/test-corpus.md](tasks/test-corpus.md#golden-tests))
+- [core] Renames carried across sides: when a renamed type's old name is reused on the same side (`X → Y` and `Z → X`), the other side's new `X` references are ambiguous → make it a conflict (skymen, 2026-09-24). Signature changes adapt calls neither side touched (a stale extra argument dropped): maybe warn
+- [corpus] `extract-triples` stores every triple on disk (3.2 GB for UTRS's 103 merges); a big history doesn't fit. A streaming `scan` + `replay` (one JSON line per file) exists in the older-format run's local folder: move it into `scripts/`
 
 ## Later
 
@@ -44,6 +46,7 @@ packaging/release · `[docs]`
 
 ## Notes
 
+- UID collisions (both branches handing out the same next uid) and the renumbering they cause are legacy: current C3 gives new instances random UIDs (skymen, 2026-09-24). Don't design around them: if two different instances ever share a uid, C3 keeps both and gives the one it loads first a free uid (lab, all three releases, `tasks/lab-experiments.md`). `check` doesn't need to support the old flat, lowercased project layout either.
 - Verified in the r500 editor bundle: the only URL params are `project`/`layout`/`eventsheet`
   (dev-mode only, loads `exampleProjects/debug/*.capx`), `#open-example-browser`, and flags
   (`safe-mode`, `debug`, `log-pane`, `perf`, `firstrun`, `slow-animations`, ...). There is no

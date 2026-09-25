@@ -194,4 +194,23 @@ export const corruptions: Corruption[] = [
     needs: async (d) => (await readJson(d, "objectTypes/Sprite.json")).effectTypes.length ? null : "an effect on Sprite (e.g. Grayscale)",
     apply: (d) => editJson(d, "objectTypes/Sprite.json", (t) => { t.effectTypes.push({ ...t.effectTypes[0] }); }),
     present: async (d) => hasDup((await readJson(d, "objectTypes/Sprite.json")).effectTypes.map((e: Json) => e.name)) },
+  // The editor refuses a second group with an existing name; a merge can still produce one.
+  // The runtime keys groups by lowercased name, so "Set group active" reaches only one of them.
+  { row: "35", title: "group name duplicated (in another sheet)",
+    needs: has(ES2, /"eventType":\s*"group"/, "a group in Event sheet 2"),
+    apply: (d) => addGroupNamed(d, (t) => t),
+    present: groupNamesDuplicated },
+  { row: "35b", title: "group names differ only in case",
+    needs: has(ES2, /"eventType":\s*"group"/, "a group in Event sheet 2"),
+    apply: (d) => addGroupNamed(d, (t) => t.toLowerCase()),
+    present: groupNamesDuplicated },
 ];
+
+async function addGroupNamed(d: string, name: (title: string) => string) {
+  const title = findEvent((await readJson(d, ES2)).events, (e) => e.eventType === "group")!.title;
+  await editJson(d, ES1, (s) => { s.events.push({ eventType: "group", disabled: false, title: name(title), description: "", isActiveOnStart: true, children: [], sid: 353535353535353 }); });
+}
+async function groupNamesDuplicated(d: string) {
+  const titles = [ES1, ES2].map(async (f) => allEvents((await readJson(d, f)).events).filter((e) => e.eventType === "group").map((e) => String(e.title).toLowerCase()));
+  return hasDup((await Promise.all(titles)).flat());
+}

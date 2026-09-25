@@ -1,7 +1,8 @@
 # Lab: what does C3 tolerate?
 
-**Status:** all 37 rows (33 + variants) measured on r449-5 (LTS), r495-2 (stable) and r503
-(beta), 2026-09-23. Only rows 19 and 29 differ between releases. Harness
+**Status:** all 39 rows (35 + variants) measured on r449-5 (LTS), r495-2 (stable) and r503
+(beta), 2026-09-23; rows 35/35b (duplicate group names) added 2026-09-24, the other 111
+verdicts unchanged on that re-run. Only rows 19 and 29 differ between releases. Harness
 in `lab/` (`npm run lab -- [--releases stable,beta] [--rows …]`), results in
 [reports/lab-matrix.md](../reports/lab-matrix.md), severities in
 [check-validator.md](check-validator.md).
@@ -33,6 +34,13 @@ automatically (DESIGN.md). Row 21 ("saved with an older release") was dropped, s
 stable and beta run now opens an r449 project.
 
 ## What the lab corrected
+- Duplicate uids (rows 2, 3), checked instance by instance on 2026-09-24
+  (`lab/out/uid-experiment/`, all three releases): C3 keeps both instances unchanged and gives
+  the one it loads first a free uid; the one loaded last keeps the uid, so a timeline or
+  anything else pointing at that uid follows the later instance. Also with no instance sid.
+- Duplicate group names (rows 35, 35b): opened and saved without a word, preview runs. The
+  runtime keys groups by lowercased name (r500 `eventSheetManager`), so "Set group active" by
+  name reaches only one of them.
 - "C3 regenerates missing/duplicate sids silently": **half true**. Duplicate uids are
   renumbered and a missing event sid is regenerated; a duplicate event sid is kept.
   (The first run got uids wrong by byte-comparing with the control; each row now checks
@@ -91,6 +99,7 @@ stable and beta run now opens an r449 project.
 | 32 | global variable name duplicated | | | |
 | 33 | event with 0 conditions + 0 actions (empty block) | | | |
 | 34 | two effects with same name on one type | | | |
+| 35 | group name duplicated (in another sheet; 35b: differs only in case) | | | |
 
 ## What we already believe (unverified, from experience)
 - C3 regenerates missing/duplicate sids silently. Unknown whether references by sid (which

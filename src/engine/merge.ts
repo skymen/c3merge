@@ -85,7 +85,7 @@ const canon = (v: Json): string =>
   isObj(v) ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canon(v[k])}`).join(",")}}`
   : Array.isArray(v) ? `[${v.map(canon).join(",")}]` : JSON.stringify(v);
 
-type ListRule = { id: string[]; also?: string[]; order: "ordered" | "set" };
+type ListRule = { id: string[]; also?: string[]; repeats?: boolean; order: "ordered" | "set" };
 
 class Merger {
   conflicts: Issue[] = [];
@@ -173,8 +173,17 @@ class Merger {
   private mergeKeyed(b: Json[], o: Json[], t: Json[], rule: ListRule, path: string, pattern: string, where: string) {
     const ids = (l: Json[]) => l.map((e) => identity(e, rule.id));
     const [ib, io, it] = [ids(b), ids(o), ids(t)];
-    // Elements we can't tell apart: merge the list as one value.
-    for (const l of [ib, io, it]) if (l.some((x) => x === null) || new Set(l).size !== l.length) return null;
+    // Elements we can't tell apart: merge the list as one value. Except identical elements
+    // identified by their content where the rule allows it (`repeats`: comments): copies are
+    // interchangeable, so they share one id (placed by their neighbours, below).
+    for (const l of [ib, io, it]) {
+      if (l.some((x) => x === null)) return null;
+      const dup = repeated(l as string[]);
+      if (dup.size && !(rule.repeats && [...dup].every((id) => id.startsWith("content:")))) return null;
+    }
+    const counts = (l: string[]) => { const c = new Map<string, number>(); for (const id of l) c.set(id, (c.get(id) ?? 0) + 1); return c; };
+    const [nb, no, nt] = [ib, io, it].map((l) => counts(l as string[]));
+    const once = (id: string) => (nb.get(id) ?? 0) <= 1 && (no.get(id) ?? 0) <= 1 && (nt.get(id) ?? 0) <= 1;
     // An element whose id isn't in the base but whose alternate id (sid) is: the same element
     // with a new id (uid renumbered), as long as that base element's id is gone on that side.
     if (rule.also) {
@@ -212,35 +221,76 @@ class Merger {
     }
 
     // Order. Primary = the side that reordered the elements all three share (ours by default).
-    const common = (l: (string | null)[]) => (l as string[]).filter((id) => B.has(id) && O.has(id) && T.has(id));
+    const common = (l: (string | null)[]) => (l as string[]).filter((id) => B.has(id) && O.has(id) && T.has(id) && once(id));
     const same = (x: string[], y: string[]) => x.length === y.length && x.every((v, i) => v === y[i]);
     const [cb, co, ct] = [common(ib), common(io), common(it)];
     const ordered = rule.order === "ordered";
     if (ordered && !same(co, cb) && !same(ct, cb) && !same(co, ct)) this.warn(path, where, "reordered on both sides: kept ours' order, check it in the editor");
     const primaryIsOurs = !same(co, cb) || same(ct, cb);
     const [P, other, Pmap] = primaryIsOurs ? [io as string[], it as string[], O] : [it as string[], io as string[], T];
-    let seq = P.filter((id) => kept.has(id));
     const otherOnly = (id: string) => !Pmap.has(id);
 
     // Insert the other side's extra elements after the element they follow there.
-    const inSeq = new Set(seq);
+    // Copies of a repeated element (identical comments) share an id, so a copy is told apart
+    // by where it sits: the nearest element above it that isn't repeated. In `seq` each copy
+    // gets its own token, so what follows a copy is inserted after that copy.
+    // Places come from the primary's whole list: what the other side deleted still says where
+    // a copy was.
+    const idOf = new Map<string, string>();
+    const primary = P.map((id, i) => { if (once(id)) return id; const tok = `${id}\0${i}`; idOf.set(tok, id); return tok; });
+    const real = (x: string) => idOf.get(x) ?? x;
+    const places = (l: string[]) => { let above = "^"; return l.map((x) => { const id = real(x), key = `${id}\0${above}`; if (once(id)) above = id; return key; }); };
+    let seq = primary.filter((x) => kept.has(real(x)));
+    const placeOf = new Map<string, string>(), copies = new Map<string, string[]>(), copiesOf = new Map<string, string[]>();
+    places(primary).forEach((key, i) => {
+      const tok = primary[i], id = real(tok);
+      if (once(id) || !kept.has(id)) return;
+      placeOf.set(tok, key);
+      copies.set(key, [...(copies.get(key) ?? []), tok]);
+      copiesOf.set(id, [...(copiesOf.get(id) ?? []), tok]);
+    });
+    const inBase = counts(places(ib as string[]).filter((_, i) => !once(ib[i]!)));
+    const [nSeq, nOther] = [counts(seq.map(real)), counts(other)];
+    const used = new Set<string>();
+    const take = (toks: string[] | undefined) => { const tok = toks?.find((x) => !used.has(x)); if (tok) used.add(tok); return tok; };
+    const fromBase = (key: string) => { const n = inBase.get(key) ?? 0; if (n) inBase.set(key, n - 1); return n > 0; };
+    const inSeq = new Set(seq.map(real));
+    const otherPlaces = places(other);
     let anchor: string | null = null;
     const groups: { anchor: string | null; ids: string[] }[] = [];
     for (let i = 0; i < other.length; i++) {
       const id = other[i];
-      if (inSeq.has(id)) { anchor = id; continue; }
-      if (!kept.has(id) || !otherOnly(id)) continue;
+      if (!once(id) && inSeq.has(id)) {
+        const key = otherPlaces[i];
+        let tok = take(copies.get(key));
+        if (tok) { fromBase(key); anchor = tok; continue; }   // the same copy, in the same place
+        if (fromBase(key)) continue;                          // the base had it here: the primary deleted it
+        // Elsewhere than in the base (something was added or moved around it): one of the
+        // primary's copies, unless the other side really has more of them.
+        if ((nOther.get(id) ?? 0) <= (nSeq.get(id) ?? 0) && (tok = take(copiesOf.get(id)))) { fromBase(placeOf.get(tok)!); anchor = tok; continue; }
+        // else a copy the other side added: inserted like any new element
+      } else if (inSeq.has(id)) { anchor = id; continue; }
+      else if (!kept.has(id) || !otherOnly(id)) continue;
       const g = groups.at(-1);
       if (g && g.anchor === anchor) g.ids.push(id);
       else groups.push({ anchor, ids: [id] });
     }
-    const primaryAdded = (id: string) => !B.has(id) && !(primaryIsOurs ? T : O).has(id);
+    // The primary's copies the other side didn't have where the base did: deleted there, as far
+    // as the other side really has fewer copies than the base.
+    const dropped = new Map<string, number>();
+    for (const tok of [...placeOf.keys()]) {
+      const id = real(tok);
+      if (used.has(tok) || (dropped.get(id) ?? 0) >= (nb.get(id) ?? 0) - (nOther.get(id) ?? 0) || !fromBase(placeOf.get(tok)!)) continue;
+      dropped.set(id, (dropped.get(id) ?? 0) + 1);
+      seq.splice(seq.indexOf(tok), 1);
+    }
+    const primaryAdded = (x: string) => !B.has(real(x)) && !(primaryIsOurs ? T : O).has(real(x));
     for (const g of groups) {
       let at = g.anchor === null ? 0 : seq.indexOf(g.anchor) + 1;
       let run = 0; // primary's own additions at the same spot
       while (at + run < seq.length && primaryAdded(seq[at + run])) run++;
       if (run && ordered) {
-        const mine = seq.slice(at, at + run), theirsIds = g.ids;
+        const mine = seq.slice(at, at + run).map(real), theirsIds = g.ids;
         if (this.replacedOnBoth(g.anchor, ib as string[], kept, O, T)) {
           const [oi, ti] = primaryIsOurs ? [mine, theirsIds] : [theirsIds, mine];
           this.conflict(path, where, "the same element was replaced differently on both sides");
@@ -255,7 +305,7 @@ class Merger {
       seq = [...seq.slice(0, at), ...g.ids, ...seq.slice(at)];
     }
 
-    const out = seq.map((id) => kept.get(id));
+    const out = seq.map((x) => kept.get(real(x)));
     this.checkDuplicateNames(out, [b, o, t], path, where);
     this.checkDuplicateVariables(out, [b, o, t], path, where);
     return out;
@@ -346,6 +396,8 @@ function defaultRule(b: Json[], o: Json[], t: Json[]): ListRule | undefined {
   for (const k of ["uid", "sid"]) if (all.every((e) => has(e as object, k))) return { id: [k], order: "ordered" };
   return undefined;
 }
+
+const repeated = (l: string[]) => { const seen = new Set<string>(), dup = new Set<string>(); for (const x of l) (seen.has(x) ? dup : seen).add(x); return dup; };
 
 export function identity(e: Json, keys: string[]): string | null {
   for (const k of keys) {

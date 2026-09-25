@@ -21,6 +21,7 @@ export interface FinishReport {
   conflicted: string[];                               // not touched: still has conflict markers
   images: string[];                                   // image files renamed after their type (uncommitted)
   check?: { errors: number; warnings: number };
+  groups?: string[];                                  // groups sharing a name (the runtime only finds one)
 }
 
 const git = (args: string[], cwd = ".") => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 1 << 30 }).trim();
@@ -119,6 +120,7 @@ export async function finishWithCheck(after: "merge" | "rebase" | "manual"): Pro
   for (const r of reports) {
     const c = await checkProject(path.join(top, r.project)).catch(() => null);
     if (c) r.check = { errors: c.counts.error, warnings: c.counts.warning };
+    if (c) r.groups = c.findings.filter((f) => f.invariant === "group-name-unique").map((f) => `${f.file}: ${f.message}`);
   }
   return reports;
 }
@@ -131,6 +133,7 @@ export function describe(reports: FinishReport[]): string[] {
     if (r.images.length) lines.push(`c3merge${where}: renamed ${r.images.length} image file(s) after their object (new frames from the other side):`, ...r.images.map((f) => `  ${f}`));
     for (const u of r.unsure) lines.push(`c3merge${where}: not sure how to rename in ${u.file}, ${u.where}: ${u.expr} (${u.reason}); fix it in C3`);
     if (r.conflicted.length && r.renames.length) lines.push(`c3merge${where}: ${r.conflicted.length} conflicted file(s) not checked for renames yet: run \`c3merge finish\` again after resolving them`);
+    if (r.groups?.length) lines.push(`c3merge${where}: groups with the same name: C3 opens the project, but "Set group active" by name reaches only one of them; rename one:`, ...r.groups.map((g) => `  ${g}`));
     if (r.check) lines.push(`c3merge${where}: check: ${r.check.errors} error(s), ${r.check.warnings} warning(s)${r.check.errors ? " (run `c3merge check` for details)" : ""}`);
   }
   return lines;

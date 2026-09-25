@@ -121,6 +121,7 @@ Uniqueness
 - uids unique project-wide
 - object type names unique (case?), layout names, event sheet names, layer names within a layout, animation names within a type, instance variable names within a type
 - function names unique across all event sheets
+- group names unique project-wide, ignoring case (`group-name-unique`, rows 35/35b): C3 opens it silently, the runtime finds only one by name; `finish` lists them after a merge
 
 Structural
 - JSON parses; `projectFormatVersion` equal across files? (only c3proj has it)

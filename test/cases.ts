@@ -105,6 +105,9 @@ const evCtx = (base: [Edit?, Edit?], ours: [Edit?, Edit?], theirs: [Edit?, Edit?
 });
 const group1 = (v: any) => v.events.find((e: any) => e.eventType === "group");
 const fn1 = (v: any) => v.events.find((e: any) => e.functionName);
+const EMPTY_COMMENT = { eventType: "comment", text: "" };
+// Event sheet 2 with an empty comment after the include and another after the block.
+const twoEmptyComments: Edit = (v) => { v.events.splice(3, 0, clone(EMPTY_COMMENT)); v.events.splice(1, 0, clone(EMPTY_COMMENT)); };
 const renameGlobal: Edit = (v) => { v.events[0].name = "Speed"; };             // Event sheet 1: Variable1 → Speed
 const renameLocal: Edit = (v) => { group1(v).children[0].name = "Count"; };    // Event sheet 2: Variable3 → Count
 const renameFn: Edit = (v) => { fn1(v).functionName = "doThing"; };           // Event sheet 2: Function1 → doThing
@@ -489,6 +492,64 @@ export const CASES: Case[] = [
     conflicts: [`${BLOCK}.conditions`],
     takeOurs: (v) => { block(v).conditions[0] = { id: "every-tick", objectClass: "System", sid: 1 }; },
     takeTheirs: (v) => { block(v).conditions[0] = { id: "every-tick", objectClass: "System", sid: 2 }; },
+  },
+
+  // Comments have no sid: two identical ones at one level share an id. Seen a lot in a real
+  // project (empty comments, one header comment repeated before similar events).
+  {
+    name: "identical comments at one level don't make the event list one value",
+    file: ES2, base: twoEmptyComments,
+    ours: (v) => { group1(v).disabled = true; }, theirs: (v) => { fn1(v).functionDescription = "hi"; },
+    merged: (v) => { group1(v).disabled = true; fn1(v).functionDescription = "hi"; },
+  },
+  {
+    name: "a copy of an identical comment added on one side is kept",
+    file: ES2, base: twoEmptyComments,
+    ours: (v) => { group1(v).disabled = true; }, theirs: (v) => { v.events.push(clone(EMPTY_COMMENT)); },
+    merged: (v) => { group1(v).disabled = true; v.events.push(clone(EMPTY_COMMENT)); },
+  },
+  {
+    name: "a copy of an identical comment deleted on one side stays deleted",
+    file: ES2, base: twoEmptyComments,
+    ours: (v) => { v.events.splice(4, 1); }, theirs: (v) => { fn1(v).functionDescription = "hi"; },
+    merged: (v) => { v.events.splice(4, 1); fn1(v).functionDescription = "hi"; },
+  },
+  {
+    // Ours' order is kept, so theirs is the side whose deletions have to be found.
+    name: "a copy of an identical comment deleted on the other side stays deleted",
+    file: ES2, base: twoEmptyComments,
+    ours: (v) => { group1(v).disabled = true; }, theirs: (v) => { v.events.splice(1, 1); },
+    merged: (v) => { group1(v).disabled = true; v.events.splice(1, 1); },
+  },
+  {
+    // The new event goes right above the second comment, so its neighbour above changes.
+    name: "a copy whose neighbour above changed is still the same copy",
+    file: ES2, base: twoEmptyComments,
+    ours: (v) => { group1(v).disabled = true; },
+    theirs: (v) => { v.events.splice(4, 0, { eventType: "block", conditions: [], actions: [], sid: 940 }); },
+    merged: (v) => { group1(v).disabled = true; v.events.splice(4, 0, { eventType: "block", conditions: [], actions: [], sid: 940 }); },
+  },
+  {
+    // The base has 2 empty comments; the new copy is the first one on that side, after the
+    // include. Counting copies from the top would call it the old first copy.
+    name: "a copy of a repeated comment added above the others lands where it was added",
+    file: ES2, base: twoEmptyComments,
+    ours: (v) => { group1(v).disabled = true; },
+    theirs: (v) => { v.events.splice(0, 0, clone(EMPTY_COMMENT), { eventType: "block", conditions: [], actions: [], sid: 931 }); },
+    merged: (v) => { group1(v).disabled = true; v.events.splice(0, 0, clone(EMPTY_COMMENT), { eventType: "block", conditions: [], actions: [], sid: 931 }); },
+  },
+  {
+    name: "identical comments among an event's actions",
+    file: ES2, base: (v) => { twoEmptyComments(v); v.events[3].actions.push({ type: "comment", text: "whatever" }); },
+    ours: (v) => { v.events[3].actions.push({ type: "comment", text: "whatever" }); }, theirs: (v) => { v.events[3].conditions[0].id = "on-end-of-layout"; },
+    merged: (v) => { v.events[3].actions.push({ type: "comment", text: "whatever" }); v.events[3].conditions[0].id = "on-end-of-layout"; },
+  },
+  {
+    name: "a new event with its own copy of a repeated comment stays together",
+    file: ES2, base: twoEmptyComments,
+    ours: (v) => { group1(v).disabled = true; },
+    theirs: (v) => { v.events.splice(5, 0, clone(EMPTY_COMMENT), { eventType: "block", conditions: [], actions: [], sid: 930 }); },
+    merged: (v) => { group1(v).disabled = true; v.events.splice(5, 0, clone(EMPTY_COMMENT), { eventType: "block", conditions: [], actions: [], sid: 930 }); },
   },
 
   {

@@ -409,6 +409,28 @@
 		"cause": ""
 	},
 	{
+		"row": "35",
+		"title": "group name duplicated (in another sheet)",
+		"release": "r449-5",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "35b",
+		"title": "group names differ only in case",
+		"release": "r449-5",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
 		"row": "1",
 		"title": "layout instance `type` → nonexistent object type",
 		"release": "r495-2",
@@ -818,6 +840,28 @@
 		"cause": ""
 	},
 	{
+		"row": "35",
+		"title": "group name duplicated (in another sheet)",
+		"release": "r495-2",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "35b",
+		"title": "group names differ only in case",
+		"release": "r495-2",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
 		"row": "1",
 		"title": "layout instance `type` → nonexistent object type",
 		"release": "r503",
@@ -1218,6 +1262,28 @@
 	{
 		"row": "34",
 		"title": "two effects with same name on one type",
+		"release": "r503",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "35",
+		"title": "group name duplicated (in another sheet)",
+		"release": "r503",
+		"editor": "loads, keeps it",
+		"present": true,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "35b",
+		"title": "group names differ only in case",
 		"release": "r503",
 		"editor": "loads, keeps it",
 		"present": true,

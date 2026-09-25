@@ -186,6 +186,25 @@ test("finish step: a global variable renamed on one side reaches a new event she
   } finally { r.cleanup(); }
 });
 
+test("finish step: groups given the same name on each side are reported", () => {
+  const r = repo();
+  try {
+    installHooks(r.dir, C3MERGE);
+    const group = (sid: number, title: string) => ({ eventType: "group", disabled: false, title, description: "", isActiveOnStart: true, children: [], sid });
+    r.git("checkout", "-qb", "feature");
+    r.edit("eventSheets/Event sheet 1.json", (v) => { v.events.push(group(41, "Enemies")); });
+    r.commit("group Enemies");
+    r.git("checkout", "-q", "main");
+    r.edit("eventSheets/Event sheet 2.json", (v) => { v.events.push(group(42, "enemies")); });
+    r.commit("group enemies");
+    const m = r.run("merge", "--no-edit", "feature");
+    assert.equal(m.status, 0, m.stderr);
+    assert.match(m.stderr, /groups with the same name/);
+    assert.match(m.stderr, /Event sheet 1\.json: group "Enemies"/);
+    assert.match(m.stderr, /Event sheet 2\.json: group "enemies"/);
+  } finally { r.cleanup(); }
+});
+
 test("finish step: new frames the other side added to a renamed object follow the rename", () => {
   const r = repo();
   try {

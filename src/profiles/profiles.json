@@ -10,8 +10,9 @@
     "`atomic` = merge as one value (changed on both sides → conflict). `scalar: 'max'` = take the larger number.",
     "`also` = a second exact key: an element whose id changed on one side (uid renumbered) is still matched by it.",
     "`moves` = elements can move between lists of this kind in one file (instances between layers).",
+    "`repeats` = elements identified by their content may appear more than once (identical comments): they don't make the list atomic; each copy is placed by the nearest non-repeated element above it.",
     "Lists not listed here: objects that all have a uid (or else all a sid) → matched by it, ordered;",
-    "anything else → atomic. Lists whose identities aren't unique in some version → atomic."
+    "anything else → atomic. Lists whose identities aren't unique in some version → atomic (except `repeats`)."
   ],
   "kinds": [
     {
@@ -51,10 +52,10 @@
       "kind": "eventSheet",
       "match": "(^|/)eventSheets/.*\\.json$",
       "rules": {
-        "events[]": { "id": ["sid", "includeSheet", "content"], "order": "ordered" },
-        "**.children[]": { "id": ["sid", "includeSheet", "content"], "order": "ordered" },
+        "events[]": { "id": ["sid", "includeSheet", "content"], "repeats": true, "order": "ordered" },
+        "**.children[]": { "id": ["sid", "includeSheet", "content"], "repeats": true, "order": "ordered" },
         "**.conditions[]": { "id": ["sid", "content"], "order": "ordered" },
-        "**.actions[]": { "id": ["sid", "content"], "order": "ordered" },
+        "**.actions[]": { "id": ["sid", "content"], "repeats": true, "order": "ordered" },
         "**.functionParameters[]": { "id": ["sid"], "order": "ordered" },
         "**.script[]": { "lines": true }
       }
