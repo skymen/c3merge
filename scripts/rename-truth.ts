@@ -21,8 +21,8 @@ const git = (args: string[], input?: string) => execFileSync("git", ["-C", repo,
 const prefix = root === "." ? "" : `${root}/`;
 
 function readAll(rev: string, dirs: string[]): Map<string, any> {
-  const files = git(["ls-tree", "-r", "--name-only", rev, "--", ...dirs.map((d) => prefix + d)]).toString()
-    .split("\n").filter((f) => f.endsWith(".json") && !f.endsWith(".uistate.json"));
+  const files = git(["ls-tree", "-r", "-z", "--name-only", rev, "--", ...dirs.map((d) => prefix + d)]).toString()
+    .split("\0").filter((f) => f.endsWith(".json") && !f.endsWith(".uistate.json"));
   const out = new Map<string, any>();
   if (!files.length) return out;
   const batch = git(["cat-file", "--batch"], files.map((f) => `${rev}:${f}`).join("\n") + "\n");

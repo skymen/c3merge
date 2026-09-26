@@ -15,6 +15,10 @@ with a C3 release. (It runs before every publish; no CI on purpose.)
   open the merged project with no dialog, and `check` must be clean. 10 s on r503. The
   field differences it prints (C3's own normalizations, e.g. new timeline keys) never
   count: they change with every release.
+- **Trusted bundled addons** (only once c3merge opens projects in C3 after a merge): a fresh
+  profile seeded with the project's addon hashes in `c3-remembered-addons` (IndexedDB
+  `localforage`/`keyvaluepairs`) must open a project that bundles an addon with no prompt.
+  Unlikely to change (skymen, 2026-09-27); `fixtures/real/common/seed-remembered.ts` does it.
 
 ## What counts as broken
 Each run tests the **candidate** (newest release, beta or stable) and a **baseline** (the

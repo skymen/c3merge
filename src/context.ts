@@ -42,7 +42,7 @@ export function eventTable(sheets: unknown[]): EventTable {
 
 export function readEvents(repo: string, rev: string, root: string): EventTable {
   const dir = root === "." ? "eventSheets" : `${root}/eventSheets`;
-  const files = git(repo, ["ls-tree", "-r", "--name-only", rev, "--", dir]).toString("utf8").split("\n").filter((f) => f.endsWith(".json") && !f.endsWith(".uistate.json"));
+  const files = git(repo, ["ls-tree", "-r", "-z", "--name-only", rev, "--", dir]).toString("utf8").split("\0").filter((f) => f.endsWith(".json") && !f.endsWith(".uistate.json"));
   if (!files.length) return eventTable([]);
   const batch = git(repo, ["cat-file", "--batch"], files.map((f) => `${rev}:${f}`).join("\n") + "\n");
   const sheets: unknown[] = [];
@@ -78,6 +78,8 @@ export interface Changes {
 }
 export interface MemberChange { owner: string; old: string; new: string } // owner: type/family sid
 
+// Paths are listed with -z: without it git quotes non-ASCII paths ("Game\360\237\237\251/…"),
+// and every file under an emoji or accented folder drops out.
 const git = (repo: string, args: string[], input?: string) =>
   execFileSync("git", ["-C", repo, ...args], { input, maxBuffer: 1 << 30 });
 const named = (l: unknown): Named[] => (Array.isArray(l) ? l.filter((x) => typeof x?.name === "string" && typeof x?.sid === "number").map((x) => ({ sid: x.sid, name: x.name })) : []);
@@ -85,8 +87,8 @@ const named = (l: unknown): Named[] => (Array.isArray(l) ? l.filter((x) => typeo
 // Object types and families of the project at `root` in commit `rev`.
 export function readTypes(repo: string, rev: string, root: string): Table {
   const dirs = ["objectTypes", "families"].map((d) => (root === "." ? d : `${root}/${d}`));
-  const files = git(repo, ["ls-tree", "-r", "--name-only", rev, "--", ...dirs]).toString("utf8")
-    .split("\n").filter((f) => f.endsWith(".json") && !f.endsWith(".uistate.json"));
+  const files = git(repo, ["ls-tree", "-r", "-z", "--name-only", rev, "--", ...dirs]).toString("utf8")
+    .split("\0").filter((f) => f.endsWith(".json") && !f.endsWith(".uistate.json"));
   const out: Table = {};
   if (!files.length) return out;
   const batch = git(repo, ["cat-file", "--batch"], files.map((f) => `${rev}:${f}`).join("\n") + "\n");
@@ -225,7 +227,7 @@ function theirsCommit(gitDir: string): { sha: string; rebase: boolean } | null {
 
 // The folder of the .c3proj that contains `repoPath` ("." for the repo root).
 function projectRoot(repoPath: string, rev: string): string | null {
-  const projects = git(".", ["ls-tree", "-r", "--name-only", rev]).toString().split("\n")
+  const projects = git(".", ["ls-tree", "-r", "-z", "--name-only", rev]).toString().split("\0")
     .filter((f) => f.endsWith(".c3proj")).map((f) => path.posix.dirname(f));
   const p = repoPath.split(path.sep).join("/");
   const inside = projects.filter((d) => d === "." || p.startsWith(`${d}/`)).sort((a, b) => b.length - a.length);

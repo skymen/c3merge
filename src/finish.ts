@@ -41,7 +41,7 @@ export function mergeBase(after: "merge" | "rebase" | "manual"): string {
 export function finish(after: "merge" | "rebase" | "manual"): FinishReport[] {
   const top = git(["rev-parse", "--show-toplevel"]);
   const base = mergeBase(after);
-  const roots = git(["ls-files", "--", "*.c3proj"], top).split("\n").filter(Boolean).map((f) => path.posix.dirname(f));
+  const roots = git(["ls-files", "-z", "--", "*.c3proj"], top).split("\0").filter(Boolean).map((f) => path.posix.dirname(f));
   return [...new Set(roots)].map((root) => finishProject(top, root, base));
 }
 

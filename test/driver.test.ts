@@ -16,8 +16,8 @@ const C3MERGE = `'${process.execPath}' --import '${TSX}' '${CLI}'`;
 const COMMAND = `${C3MERGE} merge-driver %O %A %B %P`;
 const c3 = (v: unknown) => JSON.stringify(v, null, "\t");
 
-// A repo with lab-base committed on main, the driver installed locally.
-function repo() {
+// A repo with lab-base committed on main in `folder`, the driver installed locally.
+function repo(folder = "game") {
   const dir = mkdtempSync(path.join(os.tmpdir(), "c3merge-"));
   const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const run = (...args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8" });
@@ -28,15 +28,15 @@ function repo() {
   process.chdir(dir);
   try { install({ local: true, command: COMMAND }); } finally { process.chdir(cwd); }
   init(dir);
-  cpSync(LAB, path.join(dir, "game"), { recursive: true, filter: (p) => !p.endsWith(".uistate.json") });
+  cpSync(LAB, path.join(dir, folder), { recursive: true, filter: (p) => !p.endsWith(".uistate.json") });
   git("add", "-A");
   git("commit", "-qm", "base");
-  const file = (rel: string) => path.join(dir, "game", rel);
+  const file = (rel: string) => path.join(dir, folder, rel);
   const edit = (rel: string, fn: (v: any) => void) => {
     const v = JSON.parse(readFileSync(file(rel), "utf8")); fn(v); writeFileSync(file(rel), c3(v));
   };
   const commit = (msg: string) => { git("add", "-A"); git("commit", "-qm", msg); };
-  return { dir, git, run, file, edit, commit, read: (rel: string) => readFileSync(file(rel), "utf8"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, folder, git, run, file, edit, commit, read: (rel: string) => readFileSync(file(rel), "utf8"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
 // Two branches that each create an object type: the conflict git can't merge by itself.
@@ -112,7 +112,7 @@ function renameType(r: ReturnType<typeof repo>, from: string, to: string) {
   r.edit("families/Family1.json", (v) => { v.members = v.members.map((m: string) => (m === from ? to : m)); });
   r.edit("project.c3proj", (v) => { v.objectTypes.items = v.objectTypes.items.map((m: string) => (m === from ? to : m)); });
   r.edit(`objectTypes/${from}.json`, (v) => { v.name = to; });
-  r.git("mv", `game/objectTypes/${from}.json`, `game/objectTypes/${to}.json`);
+  r.git("mv", `${r.folder}/objectTypes/${from}.json`, `${r.folder}/objectTypes/${to}.json`);
 }
 
 test("merge and rebase: an object type renamed on one side reaches the other side's new instances", () => {
@@ -163,6 +163,27 @@ test("finish step: after a clean merge, renames reach files the merge didn't, le
     assert.deepEqual([...new Set(typesIn(r.git("show", "HEAD:game/layouts/Layout 3.json")))], ["Sprite"], "the merge commit is git's");
     assert.match(r.git("status", "--porcelain"), /^ M "?game\/layouts\/Layout 3\.json"?$/m, "left for review");
     assert.ok(!r.read("layouts/Layout 3.json").endsWith("\n"), "C3's format");
+  } finally { r.cleanup(); }
+});
+
+test("a project folder with a non-ASCII name: the driver and the finish step still see the project", () => {
+  // git quotes such paths unless asked for -z; the context and the finish step used to miss them.
+  const r = repo("jeu 🟩");
+  try {
+    renameVsNewLayout(r);
+    r.git("checkout", "-q", "feature");
+    r.edit("layouts/Layout 1.json", (v) => {
+      const i = structuredClone(v.layers[0].instances[0]);
+      Object.assign(i, { uid: 50, sid: 100000000000050 }); v.layers[0].instances.push(i);
+    });
+    r.commit("new Sprite instance");
+    r.git("checkout", "-q", "main");
+    const m = r.run("merge", "--no-edit", "feature");
+    assert.equal(m.status, 0, m.stdout + m.stderr);
+    const types = JSON.parse(r.read("layouts/Layout 1.json")).layers[0].instances.map((i: any) => `${i.type}#${i.uid}`);
+    assert.ok(types.includes("Hero#50") && !types.some((t: string) => t.startsWith("Sprite")), `driver: ${types}`);
+    assert.match(m.stderr, /applied Sprite → Hero to 1 file\(s\)/);
+    assert.deepEqual([...new Set(typesIn(r.read("layouts/Layout 3.json")))], ["Hero"], "finish step");
   } finally { r.cleanup(); }
 });
 

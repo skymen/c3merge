@@ -40,6 +40,63 @@ Things the survey must know: `instanceFolderItem.sid` repeats its instance's sid
 `sceneGraphData` and `scene-graphs-folder-root.items` hold uid/sid references, not
 identities.
 
+## What git and c3merge do on the con-sule history (2026-09-26)
+con-sule (SuperOctoColor, BluePinStudio, 7 devs). Copy with push disabled at
+`~/Documents/con-sule-c3merge-test`; scripts and results in `fixtures/real/con-sule/`.
+- The team squash-merges PRs (214 of main's 260 first-parent commits), and GitHub only
+  squashes what git merges cleanly, so conflicts are resolved inside PR branches by merging
+  main into them. The scan fetches every PR head (`refs/pull/*/head`) and replays all 162
+  merge commits reachable from any ref; the 37 squashes that touch C3 files on both sides are
+  replayed too, as a check (c3merge: all clean and equal to what GitHub committed).
+- 135 merges with C3 files changed on both sides, 839 files (8 more deleted on both sides).
+  git: 47 merges / 152 files / 460 hunks need a person; c3merge: 31 / 86 / 403. Never worse:
+  the 2 merges where c3merge conflicts and git doesn't are git writing `DrawingCanvas` into
+  `usedAddons` twice ([addon-names.md](addon-names.md)).
+- Most of c3merge's conflicts are C3 release format changes seen as edits, not user work:
+  with the formats known it would be 29 / 60 / 159 ([release-migrations.md](release-migrations.md)).
+- About 60 conflicts are on elements both sides have but the merge base doesn't (22 layout
+  instances, 38 event elements). Squash merges cause them: the event sid 151113305759819 in
+  `290b956ab` reached main through the squash commit "Pigpud 3 (#96)" and the next branch
+  through its own commit "Pigpud_4" (the same event copied over), so the base predates both and
+  any later edit makes them "added on both sides with different values". Merge commits
+  instead of squashes would put the element in the base.
+- **Dropped work was deliberate.** In 48 files c3merge merges cleanly, the committed file kept
+  one side whole. The merging was done by two experienced devs, and skymen says to assume any
+  dropped work was dropped on purpose: some branches overwrote work belonging to another
+  game by mistake, and the resolvers cleaned that up. So on con-sule "committed ≠ c3merge's
+  clean result" is a resolver's decision, not a loss.
+
+Replay method, learned the hard way on con-sule. Shared scripts now in `fixtures/real/common/`
+(`scan.ts [--branches] [--all] [--exclude]`, `replay.ts`, `summary.mjs`, `conflicts.ts`):
+- Run git with `core.quotePath=false` (or `-z`): git quotes non-ASCII paths otherwise, and a
+  filter on `.json` silently drops every file under an emoji folder (598 paths here; the
+  first con-sule numbers missed half the files).
+- Follow renames like merge-ort (`diff -M`): a file moved on one side and edited on the other
+  is a normal content merge at the new path, not a skip. Only renamed-differently-on-both is a
+  tree conflict. Modify/delete and rename/rename conflicts never reach a merge driver: count
+  them as conflicts for both tools. Use `-l7000` (merge-ort's rename limit): git's diff default
+  skips rename detection on big diffs (biogun, Astral Ascent hit it).
+- Rerun of the earlier replays with the fixed scan (2026-09-26, same engine; old runs skipped
+  files missing on one side and counted them nowhere): the numbers barely move. Merges needing
+  a person, git → c3merge: Astral Ascent 377 → 258 became 379 → 260 (settled 135 and worse 16
+  unchanged); UTRS 39 → 30 became 39 → 31 (a renamed layout git pairs with a different one);
+  biogun 8 → 5 unchanged; StarDiver unchanged. Outputs in `<project>/out-v2`.
+- biogun's `main` tip can't be opened in C3: its last merge `e07972370` (2025-01-08) kept
+  `ScirraArcade` listed in `project.c3proj` (the hand-resolved file took the other side) while
+  `0acb36232` had deleted `objectTypes/ScirraArcade.json` ("Failed to read file
+  objectTypes/ScirraArcade.json"). `check`'s listed-file-missing rule and an open in C3 both
+  catch it.
+
+## Vicky, trubija, Flechita (2026-09-26)
+clovelt's repos, cloned with push disabled at `~/Documents/<name>-c3merge-test`, replayed with
+`common/` (`--all --branches`). Small: 2–5 devs, plain merge commits.
+- Past merges needing a person, git → c3merge: Vicky 2 → 0 (3 merges); trubija 8 → 4 (28).
+- Open branches merged now: Flechita `tavo` 8 files / 404 hunks → 3 / 36. The rest are stale
+  (Vicky `arte`, Dec 2024, redone as `arte-nuevo`; trubija's 2022 branches), mostly
+  modify/delete and moved instances.
+- Most of Flechita's and much of Vicky's conflicts are UID collisions: both projects have
+  `uidAllocationMode: "increment"` (con-sule and UTRS: "random"). See NOTES.md (`doctor` warning).
+
 ## Hand-made fixtures
 `fixtures/<kind>/<case>/{base,ours,theirs,expected}.json` + `collisions.expected.json`.
 One case per engine rule:

@@ -224,6 +224,16 @@ export const corruptions: Corruption[] = [
     needs: has(ES2, /"eventType":\s*"group"/, "a group in Event sheet 2"),
     apply: (d) => addGroupNamed(d, (t) => t.toLowerCase()),
     present: groupNamesDuplicated },
+  // Set lists holding the same entry twice (what a text merge of both sides adding it can leave).
+  { row: "36", title: "family member listed twice",
+    apply: (d) => editJson(d, "families/Family1.json", (f) => { f.members.push(f.members[0]); }),
+    present: async (d) => hasDup((await readJson(d, "families/Family1.json")).members) },
+  { row: "36b", title: "`usedAddons` entry listed twice",
+    apply: (d) => editJson(d, C3PROJ, (p) => { p.usedAddons.push(structuredClone(p.usedAddons.find((a: Json) => a.id === "Sprite"))); }),
+    present: async (d) => hasDup((await readJson(d, C3PROJ)).usedAddons.map((a: Json) => `${a.type}:${a.id}`)) },
+  { row: "36c", title: "project-bar entry listed twice (in two folders)",
+    apply: (d) => editJson(d, C3PROJ, (p) => { p.objectTypes.subfolders.push({ items: ["Sprite"], subfolders: [], name: "Copies" }); }),
+    present: async (d) => { const p = await readJson(d, C3PROJ); const names: string[] = []; const w = (f: Json) => { names.push(...(f.items ?? [])); (f.subfolders ?? []).forEach(w); }; w(p.objectTypes); return hasDup(names); } },
 ];
 
 async function addGroupNamed(d: string, name: (title: string) => string) {

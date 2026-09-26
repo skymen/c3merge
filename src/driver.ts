@@ -217,7 +217,7 @@ export function doctor(cwd = process.cwd()): DoctorLine[] {
   out.push(missing.length
     ? { ok: false, text: `hooks missing in this clone: ${missing.join(", ")} (renames won't reach files the merge didn't touch)`, fix: "c3merge init" }
     : { ok: true, text: "hooks: finish step after merges and rebases" });
-  const proj = git(["ls-files", "*.c3proj"], root).split("\n").filter(Boolean)[0];
+  const proj = git(["ls-files", "-z", "*.c3proj"], root).split("\0").filter(Boolean)[0];
   if (!proj) out.push({ ok: false, text: "no .c3proj tracked in this repository (folder projects only; .c3p files can't be merged)" });
   else {
     const attr = git(["check-attr", "merge", "--", proj], root);

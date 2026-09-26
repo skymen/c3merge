@@ -27,7 +27,7 @@ const show = (rev: string, file: string): string | null => {
 const MERGED = /(^|\/)[^/]*\.c3proj$|^(.*\/)?(eventSheets|layouts|objectTypes|families|timelines|flowcharts)\/.*\.json$/;
 const isC3Json = (f: string) => MERGED.test(f) && !f.endsWith(".uistate.json");
 // The project root inside the repo: where the .c3proj lives.
-const root = git("ls-files", "*.c3proj").split("\n").filter(Boolean).map((f) => path.posix.dirname(f))[0] ?? ".";
+const root = git("ls-files", "-z", "*.c3proj").split("\0").filter(Boolean).map((f) => path.posix.dirname(f))[0] ?? ".";
 const rel = (f: string) => (root === "." ? f : f.slice(root.length + 1));
 
 const merges = values.merges
@@ -41,7 +41,7 @@ for (const m of merges) {
   const bases = git("merge-base", "--all", p1, p2).split("\n").filter(Boolean);
   if (bases.length !== 1) continue; // criss-cross: no single base, skip
   const base = bases[0];
-  const changed = (a: string, b: string) => new Set(git("diff", "--name-only", "--no-renames", a, b).split("\n").filter(isC3Json));
+  const changed = (a: string, b: string) => new Set(git("diff", "-z", "--name-only", "--no-renames", a, b).split("\0").filter(isC3Json));
   const ours = changed(base, p1);
   const both = [...changed(base, p2)].filter((f) => ours.has(f));
   if (!both.length) continue;
