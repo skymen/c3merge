@@ -102,8 +102,10 @@ into main: Desert Landing 21 → 19 conflicts; 2 of its 3 tilemaps merge (cell f
 a plain merge of the stored grids gives), the third has 2 tiles painted differently.
 
 ## Later
-- Script lines: `script[]` arrays get the line-by-line merge (done); script events that
-  store their code as one string (`"script": "…\n…"`) should get it too.
-- Timelines: key tracks by the instance/property they animate, once real timeline merges
-  show up.
+- Script lines: `script[]` arrays get the line-by-line merge (done). C3 stores event JS as
+  a list of lines (all 49 surveyed projects), so no single-string case to handle (dropped
+  2026-09-26).
+- Timelines: nothing specific planned (skymen, 2026-09-26: no project uses them yet). Tracks
+  and keyframes stay one value each, so both sides editing one timeline's tracks is one
+  conflict, never a wrong merge.
 - Profiles for new kinds (scene graphs, 3D models) as they appear in the survey.

@@ -2,7 +2,7 @@
 
 **Status:** `@skymen75/c3cli` 0.1.0 and `@skymen75/c3merge` 0.1.0 published (2026-09-24);
 c3merge 0.2.0 (identical comments, duplicate group names, tilemaps tile by tile, tilemap
-checks fixed) ready to publish, 2026-09-25. The other channels aren't started.
+checks fixed) published 2026-09-25. The other channels aren't started.
 
 ## npm (2026-09-24)
 - Names: `@skymen75/c3cli` and `@skymen75/c3merge`. npm refused the unscoped `c3cli` as too
@@ -27,8 +27,7 @@ checks fixed) ready to publish, 2026-09-25. The other channels aren't started.
 
 - Channels: npm (`npm install -g @skymen75/c3merge`), gh extension, Homebrew tap (`skymen/tap/c3merge`), raw
   release binaries. All from one release workflow.
-- Versioning: semver for the tool. Profiles carry a `c3Release` range they were validated
-  against; `check` warns when the project's `savedWithRelease` is outside it.
-- Track C3 releases: a scheduled job that opens the fixture project in the newest beta via
-  c3cli, saves, diffs — detects format changes early.
+- Versioning: semver for the tool. No per-release ranges or warnings (skymen, 2026-09-26):
+  c3merge stays generic enough that a change by Scirra doesn't break it (DESIGN.md "Future
+  releases"). Checking that it really doesn't is [release-watch.md](release-watch.md).
 - Windows: driver path with spaces; test on a Windows runner (many C3 users).

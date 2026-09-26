@@ -63,6 +63,9 @@ Extract from existing history without modifying anything (read-only `git show`):
   BFC one-off edits), but the diff between c3merge output and it is the review checklist.
 
 ## Golden tests
+**Status (2026-09-26):** unit and integration are done (`test/cases.ts`, 81 cases byte for
+byte; `test/driver.test.ts`); fidelity is `scripts/fidelity.ts`, run by hand. Real merges as
+golden files: not for now (skymen). No CI: tests run before every publish.
 - unit: every hand-made fixture must match `expected` exactly (bytes), collisions must match.
 - integration: build a temp git repo per scenario, commit base, branch, apply ours/theirs,
   `git merge` with the driver installed `--local`, assert file + exit code + log content;

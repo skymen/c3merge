@@ -1,6 +1,7 @@
 # gh extension
 
-**Status:** not started (2026-09-21)
+**Status:** dropped (skymen, 2026-09-26): `gh c3merge install` does nothing `npm i -g` doesn't.
+The one real gain, installing without Node, comes from plain binaries (NOTES.md [dist]).
 
 Repo `skymen/gh-c3merge` (gh requires the `gh-` prefix). Install:
 `gh extension install skymen/gh-c3merge`. Then `gh c3merge <cmd>` = `c3merge <cmd>`.

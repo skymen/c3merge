@@ -14,38 +14,33 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [dist] Publish `@skymen75/c3merge` 0.2.0: ready (`npm publish`). 0.1.0 and `@skymen75/c3cli` 0.1.0 are live (2026-09-24); the devDependency points at c3cli (`npm:@skymen75/c3cli@^0.1.0`) ([tasks/dist.md](tasks/dist.md))
+- [core] Renames carried across sides: when a renamed type's old name is reused on the same side (`X → Y` and `Z → X`), the other side's new `X` references are ambiguous → make it a conflict (skymen, 2026-09-24; important, needs investigating first, 2026-09-26). Signature changes adapt calls neither side touched (a stale extra argument dropped): maybe warn
 
 ## Normal
 
-- [check] Action/condition ids per addon (lab row 11): needs each addon's ACE list; maybe from the editor via c3cli, per release ([tasks/check-validator.md](tasks/check-validator.md))
 - [check] After a merge: the driver only reminds people to run `check` (it can't tell which file is last). Group "type X doesn't exist" findings (one per instance today) ([tasks/check-validator.md](tasks/check-validator.md#when-to-run))
-- [action] Reusable workflow: `check` as a PR status + auto-resolve conflicts with the driver + "install c3merge" nudge comment ([tasks/github-action.md](tasks/github-action.md))
-- [gh] `gh extension install skymen/gh-c3merge`, `gh c3merge install|init|doctor|check` ([tasks/gh-extension.md](tasks/gh-extension.md))
-- [corpus] Golden tests: for every fixture triple, expected merged output + expected collision list; run in CI ([tasks/test-corpus.md](tasks/test-corpus.md#golden-tests))
-- [core] Renames carried across sides: when a renamed type's old name is reused on the same side (`X → Y` and `Z → X`), the other side's new `X` references are ambiguous → make it a conflict (skymen, 2026-09-24). Signature changes adapt calls neither side touched (a stale extra argument dropped): maybe warn
-- [core] Float noise: both sides change a size/origin to values < 0.001 apart (C3 recomputing in floating point) → same change, take either. Prototype on a current-release history: conflicts 162 → 90, 0 clean results changed
-- [corpus] `extract-triples` stores every triple on disk (3.2 GB for UTRS's 103 merges); a big history doesn't fit. A streaming `scan` + `replay` (one JSON line per file) exists in the older-format run's local folder: move it into `scripts/`
+- [driver] `c3merge resolve <file> --ours|--theirs`: take one side at every ours/theirs marker, keeping everything that merged cleanly (VS Code's "Accept All Current/Incoming" from the command line). Leave markers with other labels (`renamed (check)`, `fix in C3`, `keep both`). Small: a wrapper over `takeSide`, which every engine test case already runs; add one CLI test, since skymen won't test it by hand (2026-09-26)
+- [action] Release watch: a scheduled job tests each new C3 release once (lab rows + fidelity, against the last release that passed, in the same run) and opens an issue on a break, or comments on the open one ([tasks/release-watch.md](tasks/release-watch.md))
 
 ## Later
 
-- [profiles] Script events that store their code as one string (`"script": "…\n…"`) should get the line merge too; key timeline tracks by what they animate ([tasks/profiles.md](tasks/profiles.md#later))
-- [check] Repair mode: `check --fix` for the classes C3 does *not* repair itself (dedupe sids, drop dangling references with a report)
-- [driver] `git rebase` / `cherry-pick` / `stash pop` behavior: verify driver fires and collision log is still reachable
-- [driver] Binary assets (PNG, audio) stay ordinary git conflicts — document, don't try to merge
-- [dist] Homebrew tap, gh extension binaries per OS, version scheme tracking C3 releases (`savedWithRelease`) ([tasks/dist.md](tasks/dist.md))
-- [action] GitLab CI equivalent (only if asked)
-- [driver] `c3merge resolve <file> --ours|--theirs`: take one side of every hunk in a file (`takeSide` exists)
+- [action] Reusable workflow: `check` as a PR status + auto-resolve conflicts with the driver + "install c3merge" nudge comment (skymen will do it later, 2026-09-26) ([tasks/github-action.md](tasks/github-action.md))
+- [action] Optional "open it in C3" step (c3cli) after the merge, for what `check` can't see (lab row 11, action/condition ids per addon: too much work to check statically). Too slow for the local driver (10 s to minutes, usually to find nothing): Action only, or opt-in. Low priority (skymen, 2026-09-26)
+- [driver] Add `git stash pop` to `test/driver.test.ts` (merge, rebase and cherry-pick are covered). Low stakes: merges are the case that matters (skymen, 2026-09-26)
+- [dist] Plain binaries per OS (no Node needed), maybe a Homebrew tap: when c3merge is ready to ship to non-developers (skymen, 2026-09-26). No gh extension: it adds nothing over npm or a binary ([tasks/dist.md](tasks/dist.md))
 
 ## Ideas
 
-- `c3merge diff a.json b.json`: structural diff in C3 terms ("instance Player moved", "event 12 condition changed") — reuse the matching engine, useful in PRs
+- Real merges as golden files: store c3merge's output for every real merge (UTRS's 103 and the others) and fail when an engine change alters one. Local only (game content, gitignored). No need for now (skymen, 2026-09-26) ([tasks/test-corpus.md](tasks/test-corpus.md#golden-tests))
+- `c3merge diff a.json b.json`: structural diff in C3 terms ("instance Player moved", "event 12 condition changed") — reuse the matching engine, useful in PRs. Together with a better conflict-resolution tool (visual or CLI): hugely important, future work (skymen, 2026-09-26)
 - `c3merge blame`-style: which branch introduced which event
 - A tiny VS Code / GitHub PR renderer for the collision log
 - Detect C3 "repaired on load" from the editor log and feed it back into the tolerance matrix automatically
 
 ## Notes
 
+- No CI on purpose: `npm test` runs before every publish (`prepublishOnly`), which is enough (skymen, 2026-09-26).
+- Merges are the case that matters: that's where real work on both sides meets and git fails. Rebase, cherry-pick and stash are usually done where git already does fine (skymen, 2026-09-26).
 - UID collisions (both branches handing out the same next uid) and the renumbering they cause are legacy: current C3 gives new instances random UIDs (skymen, 2026-09-24). Don't design around them: if two different instances ever share a uid, C3 keeps both and gives the one it loads first a free uid (lab, all three releases, `tasks/lab-experiments.md`). `check` doesn't need to support the old flat, lowercased project layout either.
 - Verified in the r500 editor bundle: the only URL params are `project`/`layout`/`eventsheet`
   (dev-mode only, loads `exampleProjects/debug/*.capx`), `#open-example-browser`, and flags
