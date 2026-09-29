@@ -5,6 +5,7 @@
 import { changes, type Changes, type ProjectContext } from "../context.ts";
 import { profileFor, ruleFor, type Profile, type Rule } from "../profiles/index.ts";
 import { mergeLines } from "./lines.ts";
+import { settleFolders } from "./folders.ts";
 import { reconcileMoves, type ForcedConflict } from "./moves.ts";
 import { aceLabel, applyRenames, flagLeftovers } from "./renames.ts";
 import { detectStyle, render } from "./render.ts";
@@ -38,6 +39,15 @@ export function mergeFile(repoPath: string, base: string | null, ours: string, t
     try { return JSON.parse(text); } catch (e) { throw new ParseError(`${side}: ${(e as Error).message}`); }
   };
   const b = parse("base", base), o = parse("ours", ours), t = parse("theirs", theirs);
+  // Git pairs files by path. A file holding a different object on each side (one side renamed
+  // it away and another object to this name, or both created one) can't be merged: its
+  // contents would mix two objects.
+  const sidOf = (v: Maybe) => (isObj(v) && typeof v.sid === "number" ? v.sid : undefined);
+  if (sidOf(o) !== undefined && sidOf(t) !== undefined && sidOf(o) !== sidOf(t)) {
+    const desc = (v: any) => `${typeof v.name === "string" ? `"${v.name}" ` : ""}(sid ${v.sid})`;
+    const message = `a different object on each side: ${desc(o)} on ours, ${desc(t)} on theirs (one side renamed it away and another object to this name, both created one, or git paired a deleted object with a similar new one); keep the one this file should hold, and redo the other one's changes in its own file`;
+    return { text: render(new Conflict(o, t), detectStyle(ours)), conflicts: [{ path: "(whole file)", where: "(whole file)", message }], warnings: [] };
+  }
   const [oAsIs, tAsIs] = [JSON.stringify(o), JSON.stringify(t)];
   const profile = profileFor(repoPath);
   if (context) applyRenames(profile.kind, b, o, t, context);
@@ -46,6 +56,7 @@ export function mergeFile(repoPath: string, base: string | null, ours: string, t
   const m = new Merger(profile, sides);
   const merged = m.merge(b, o, t, "", "", "");
   m.applyForced(merged, forced);
+  if (profile.kind === "project") settleFolders(b, o, t, merged, (where, message) => m.flag(where, message));
   if (context) flagLeftovers(profile.kind, merged, context, (ace, key, guess, reason) => {
     const where = aceLabel(ace, key);
     // A call with the wrong number of arguments: no guess, the hunk only marks the spot.
@@ -59,7 +70,7 @@ export function mergeFile(repoPath: string, base: string | null, ours: string, t
     if (v instanceof Conflict || v instanceof Run) return; // already marked
     const labels: [string, string] = ["as merged", "renamed (check)"];
     ace.parameters[key] = Array.isArray(ace.parameters) ? new Run([v], [guess], labels) : new Conflict(v, guess, labels);
-  });
+  }, (ace, key, message) => { const where = aceLabel(ace, key); m.warn(where, where, message); });
   const result = { conflicts: m.conflicts, warnings: m.warnings };
   // Keep the exact bytes of a side when the merge is that side (formatting of non-C3 JSON).
   if (!m.conflicts.length) {
@@ -118,6 +129,7 @@ class Merger {
     if (eq(b, o)) return t;
     if (eq(b, t)) return o;
     const rule = ruleFor(this.profile, pattern);
+    if (rule && "ours" in rule) return o === ABSENT ? t : o;
     if (rule && "scalar" in rule && typeof o === "number" && typeof t === "number") return Math.max(o, t);
     if (rule && "tiles" in rule && b !== ABSENT && o !== ABSENT && t !== ABSENT) return this.mergeTiles(b, o, t, path, where);
     if (!(rule && ("atomic" in rule || "tiles" in rule))) {
@@ -133,7 +145,7 @@ class Merger {
   }
 
   private conflict(path: string, where: string, message: string) { this.conflicts.push({ path: path || "(whole file)", where: where || "(whole file)", message }); }
-  private warn(path: string, where: string, message: string) { this.warnings.push({ path: path || "(whole file)", where: where || "(whole file)", message }); }
+  warn(path: string, where: string, message: string) { this.warnings.push({ path: path || "(whole file)", where: where || "(whole file)", message }); }
 
   private mergeObject(b: { [k: string]: Json }, o: { [k: string]: Json }, t: { [k: string]: Json }, path: string, pattern: string, where: string) {
     // Ours' key order; a key only theirs added goes after the key it follows in theirs
@@ -158,7 +170,7 @@ class Merger {
   // null: can't be merged element by element, the caller makes it one conflict.
   private mergeList(b: Json[], o: Json[], t: Json[], path: string, pattern: string, where: string): unknown[] | null {
     const rule: Rule | undefined = ruleFor(this.profile, `${pattern}[]`) ?? defaultRule(b, o, t);
-    if (!rule || "atomic" in rule || "scalar" in rule || "tiles" in rule) return null;
+    if (!rule || "atomic" in rule || "scalar" in rule || "tiles" in rule || "ours" in rule) return null;
     if ("lines" in rule) return this.mergeLineList(b, o, t, path, where);
     return this.mergeKeyed(b, o, t, rule, path, pattern, where);
   }
@@ -227,7 +239,7 @@ class Merger {
       } else if (inO || inT) {
         const [mine, side] = inO ? [O.get(id)!, "ours"] : [T.get(id)!, "theirs"];
         if (!inB) kept.set(id, mine); // added on one side
-        else if (!this.onlyAutomatic(B.get(id)!, mine, migrated(b, inO ? o : t), side === "ours" ? this.sides?.ours : this.sides?.theirs)) {
+        else if (!this.onlyAutomatic(B.get(id)!, mine, [...migrated(b, inO ? o : t), ...this.displayKeys(mine, pattern)], side === "ours" ? this.sides?.ours : this.sides?.theirs)) {
           this.conflict(elPath(id), elWhere(id), `deleted on ${side === "ours" ? "theirs" : "ours"}, changed on ${side}`);
           kept.set(id, inO ? new Run([mine], []) : new Run([], [mine]));
         } // else: deleted on the other side and untouched here → gone
@@ -325,8 +337,14 @@ class Merger {
     return out;
   }
 
+  // An element's keys whose rule is `ours` (display text C3 rewrites by itself).
+  private displayKeys(e: Json, pattern: string): string[] {
+    return isObj(e) ? Object.keys(e).filter((k) => { const r = ruleFor(this.profile, `${pattern}[].${k}`); return !!r && "ours" in r; }) : [];
+  }
+
   // Changes C3 makes by itself are not edits, so a deletion on the other side wins over them
   // (renames were already applied to the base by applyRenames):
+  // - display text C3 rewrites (`ours` rule: addon names);
   // - keys every element of the list gained on that side and none had at base: a format
   //   change from opening the project in a newer release (e.g. every instance gets a sid
   //   and tags);

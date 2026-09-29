@@ -54,7 +54,7 @@ function gitTextMerge(ours: string, base: string, theirs: string) {
 }
 const isJson = (s: string) => { try { JSON.parse(s); return true; } catch { return false; } };
 
-// Conflicts and order warnings go to stderr (git shows it) and to .git/c3merge/conflicts.md,
+// Conflicts and warnings go to stderr (git shows it) and to .git/c3merge/conflicts.md,
 // which starts over for each new merge/rebase/cherry-pick.
 function report(repoPath: string, conflicts: Issue[], warnings: Issue[]) {
   if (!conflicts.length && !warnings.length) { remindCheck(); return; }
@@ -64,11 +64,11 @@ function report(repoPath: string, conflicts: Issue[], warnings: Issue[]) {
     for (const c of conflicts) lines.push(`- ${c.where}: ${c.message}`);
   }
   if (warnings.length) {
-    lines.push("", "Merged, but check the order in the editor:");
+    lines.push("", "Merged, but check in the editor:");
     for (const w of warnings) lines.push(`- ${w.where}: ${w.message}`);
   }
   const text = lines.join("\n") + "\n\n";
-  process.stderr.write(`c3merge: ${repoPath}: ${conflicts.length} conflict(s), ${warnings.length} order warning(s); details in .git/c3merge/conflicts.md\n`);
+  process.stderr.write(`c3merge: ${repoPath}: ${conflicts.length} conflict(s), ${warnings.length} warning(s); details in .git/c3merge/conflicts.md\n`);
   const log = logFile();
   if (log) appendFileSync(log, text);
   remindCheck();
@@ -197,7 +197,8 @@ export function installHooks(repoRoot: string, command = c3mergeCommand()): { ho
   });
 }
 
-export interface DoctorLine { ok: boolean; text: string; fix?: string }
+// `warn`: advice, not a broken setup (doesn't fail doctor).
+export interface DoctorLine { ok: boolean; text: string; fix?: string; warn?: boolean }
 export function doctor(cwd = process.cwd()): DoctorLine[] {
   const out: DoctorLine[] = [];
   const version = tryGit(["--version"]);
@@ -217,13 +218,20 @@ export function doctor(cwd = process.cwd()): DoctorLine[] {
   out.push(missing.length
     ? { ok: false, text: `hooks missing in this clone: ${missing.join(", ")} (renames won't reach files the merge didn't touch)`, fix: "c3merge init" }
     : { ok: true, text: "hooks: finish step after merges and rebases" });
-  const proj = git(["ls-files", "-z", "*.c3proj"], root).split("\0").filter(Boolean)[0];
-  if (!proj) out.push({ ok: false, text: "no .c3proj tracked in this repository (folder projects only; .c3p files can't be merged)" });
-  else {
+  const projects = git(["ls-files", "-z", "*.c3proj"], root).split("\0").filter(Boolean);
+  if (!projects.length) out.push({ ok: false, text: "no .c3proj tracked in this repository (folder projects only; .c3p files can't be merged)" });
+  for (const proj of projects) {
     const attr = git(["check-attr", "merge", "--", proj], root);
     out.push(attr.endsWith(": c3")
       ? { ok: true, text: `.gitattributes: ${proj} uses the c3 driver` }
       : { ok: false, text: `.gitattributes: ${proj} doesn't use the c3 driver`, fix: "c3merge init (then commit .gitattributes)" });
+    // Increasing UIDs (old projects: no setting at all): two branches hand out the same next
+    // UIDs, so two different instances share one and c3merge takes them for one.
+    let mode: unknown;
+    try { mode = JSON.parse(readFileSync(path.join(root, proj), "utf8")).properties?.uidAllocationMode; } catch { continue; }
+    if (mode !== "random") out.push({ ok: true, warn: true,
+      text: `${proj}: new objects get increasing UIDs (${mode === undefined ? "no UID numbering setting" : `UID numbering "${mode}"`}), so two branches hand out the same ones and c3merge sees two different instances as one`,
+      fix: "in Construct: Project Properties → Advanced → UID numbering → Random, then save and commit" });
   }
   return out;
 }

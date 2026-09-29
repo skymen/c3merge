@@ -2,7 +2,9 @@
 
 **Status:** all 39 rows (35 + variants) measured on r449-5 (LTS), r495-2 (stable) and r503
 (beta), 2026-09-23; rows 35/35b (duplicate group names) added 2026-09-24, the other 111
-verdicts unchanged on that re-run; row 29 split into 29–29d (tilemap data) 2026-09-25.
+verdicts unchanged on that re-run; row 29 split into 29–29d (tilemap data) 2026-09-25; rows
+36–36d (entries listed twice) added 2026-09-29, the other verdicts unchanged (29c on r449-5
+kept from before: that run's Save as timed out behind the progress dialog, a harness glitch).
 Only rows 19, 29 and 29c differ between releases. Harness
 in `lab/` (`npm run lab -- [--releases stable,beta] [--rows …]`), results in
 [reports/lab-matrix.md](../reports/lab-matrix.md), severities in
@@ -51,6 +53,11 @@ stable and beta run now opens an r449 project.
 - Duplicate group names (rows 35, 35b): opened and saved without a word, preview runs. The
   runtime keys groups by lowercased name (r500 `eventSheetManager`), so "Set group active" by
   name reaches only one of them.
+- Entries listed twice (rows 36–36d): a family member or an addon listed twice is
+  de-duplicated silently. A project-bar entry listed in two folders is refused on all three
+  releases, even when its file exists in both folders (36d, what a merge of two branches
+  adding it into different folders leaves; C3: "layout name 'Layout 2' already used"):
+  `check`'s `listed-once` is an error.
 - "C3 regenerates missing/duplicate sids silently": **half true**. Duplicate uids are
   renumbered and a missing event sid is regenerated; a duplicate event sid is kept.
   (The first run got uids wrong by byte-comparing with the control; each row now checks
@@ -110,6 +117,7 @@ stable and beta run now opens an r449 project.
 | 33 | event with 0 conditions + 0 actions (empty block) | | | |
 | 34 | two effects with same name on one type | | | |
 | 35 | group name duplicated (in another sheet; 35b: differs only in case) | | | |
+| 36 | entry listed twice: family member / `usedAddons` entry (36b) / project-bar entry in two folders (36c: its file in one; 36d: in both) | | | |
 
 ## What we already believe (unverified, from experience)
 - C3 regenerates missing/duplicate sids silently. Unknown whether references by sid (which

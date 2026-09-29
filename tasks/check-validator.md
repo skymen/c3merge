@@ -1,6 +1,7 @@
 # `c3merge check` — cross-file validator
 
 **Status:** implemented (2026-09-23): `c3merge check <folder|.c3p> [--json | --github] [--all]`,
+references to one missing type or function grouped per file (2026-09-29),
 `c3merge invariants` (lists each invariant with the lab measurement behind its severity).
 Code: `src/model/project.ts` (loader), `src/check/` (invariants, severity, runner).
 Tests: every lab corruption must trip its invariant; the untouched base and all 47 real

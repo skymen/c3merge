@@ -464,6 +464,50 @@
 		"cause": ""
 	},
 	{
+		"row": "36",
+		"title": "family member listed twice",
+		"release": "r449-5",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "36b",
+		"title": "`usedAddons` entry listed twice",
+		"release": "r449-5",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "36c",
+		"title": "project-bar entry listed twice (in two folders)",
+		"release": "r449-5",
+		"editor": "refuses",
+		"present": null,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": "Failed to read file 'objectTypes\\Copies\\Sprite.json':  NotFoundError: A requested file or directory could not be found at the time an operation was processed."
+	},
+	{
+		"row": "36d",
+		"title": "project-bar entry listed twice (in two folders), its file in both",
+		"release": "r449-5",
+		"editor": "refuses",
+		"present": null,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": "Error: layout name 'Layout 2' already used"
+	},
+	{
 		"row": "1",
 		"title": "layout instance `type` → nonexistent object type",
 		"release": "r495-2",
@@ -928,6 +972,50 @@
 		"cause": ""
 	},
 	{
+		"row": "36",
+		"title": "family member listed twice",
+		"release": "r495-2",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "36b",
+		"title": "`usedAddons` entry listed twice",
+		"release": "r495-2",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "36c",
+		"title": "project-bar entry listed twice (in two folders)",
+		"release": "r495-2",
+		"editor": "refuses",
+		"present": null,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": "Failed to read file 'objectTypes\\Copies\\Sprite.json':  NotFoundError: A requested file or directory could not be found at the time an operation was processed."
+	},
+	{
+		"row": "36d",
+		"title": "project-bar entry listed twice (in two folders), its file in both",
+		"release": "r495-2",
+		"editor": "refuses",
+		"present": null,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": "Error: layout name 'Layout 2' already used"
+	},
+	{
 		"row": "1",
 		"title": "layout instance `type` → nonexistent object type",
 		"release": "r503",
@@ -1390,5 +1478,49 @@
 		"previewStarts": true,
 		"previewErrors": false,
 		"cause": ""
+	},
+	{
+		"row": "36",
+		"title": "family member listed twice",
+		"release": "r503",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "36b",
+		"title": "`usedAddons` entry listed twice",
+		"release": "r503",
+		"editor": "repairs silently",
+		"present": false,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": ""
+	},
+	{
+		"row": "36c",
+		"title": "project-bar entry listed twice (in two folders)",
+		"release": "r503",
+		"editor": "refuses",
+		"present": null,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": "Failed to read file 'objectTypes\\Copies\\Sprite.json':  NotFoundError: A requested file or directory could not be found at the time an operation was processed."
+	},
+	{
+		"row": "36d",
+		"title": "project-bar entry listed twice (in two folders), its file in both",
+		"release": "r503",
+		"editor": "refuses",
+		"present": null,
+		"dropped": [],
+		"previewStarts": true,
+		"previewErrors": false,
+		"cause": "Error: layout name 'Layout 2' already used"
 	}
 ]

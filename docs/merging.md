@@ -36,7 +36,17 @@ Change / Accept Incoming Change / Accept Both Changes" and any other git tool wo
 usual. When done, run `git add` on the file. The project won't open in C3 until every
 marker is gone, on purpose.
 
-`.git/c3merge/conflicts.md` lists every conflict and order warning of the current merge,
+To take one side at every conflict of a file while keeping everything that merged cleanly
+(`git checkout --ours <file>` throws that away too):
+
+```sh
+c3merge resolve game/layouts/Level\ 1.json --theirs     # or --ours; several files at once work
+```
+
+It only resolves `ours` / `theirs` markers and leaves the others (labels below) for you.
+It doesn't stage the file: look, then `git add` it and run `c3merge finish`.
+
+`.git/c3merge/conflicts.md` lists every conflict and warning of the current merge,
 with locations in C3 terms:
 
 ```
@@ -45,7 +55,7 @@ with locations in C3 terms:
 1 conflict(s): pick a side at each <<<<<<< marker in the file, then `git add` it.
 - layers[Layer 0].instances[Sprite#2].world.y: changed on both sides
 
-Merged, but check the order in the editor:
+Merged, but check in the editor:
 - layers[Layer 0].instances: added at the same place on both sides: kept ours first, check the order in the editor
 ```
 
@@ -73,6 +83,11 @@ layout list, and both inserted at the same spot, ours goes first and you get an 
 warning. Where C3 doesn't care about order, no warning is given. Examples are the project
 bar (C3 sorts it by name, except layouts) and the `usedAddons` list.
 
+**Conflict** when the same project bar item was added (or moved) into a different folder on
+each side. C3 stores each item's file under its folders (`layouts/Levels/Level 1.json`),
+so both files exist, and it refuses a project that lists an item twice. The marker puts one
+copy on each side: take the same side at both places, then delete the other side's file.
+
 ### Different edits to the same thing
 One side moves an instance and the other changes its instance variable. Or one edits an
 event's condition and the other adds an action to it. Each element is matched by its
@@ -80,7 +95,9 @@ identity: `uid` for instances, `sid` for events, layers and variables, and the n
 effects and folders. Then each is merged field by field. The same change on both sides is
 fine.
 
-**Conflict** when the same value was changed to two different things.
+**Conflict** when the same value was changed to two different things. Except addon names:
+C3 rewrites them in the editor's language on every save and never reads them, so ours is
+kept.
 
 ### An instance moved to another layer
 Instances are matched across the layers of a layout. When one side moves an instance to
@@ -98,7 +115,8 @@ The exception is changes that C3 makes by itself. They aren't edits, so the dele
   family) gained them on that side, with the matching template flags;
 - every element of the list gained the same new keys, which is what opening the project in
   a newer release does;
-- the only change is a rename made elsewhere (below).
+- the only change is a rename made elsewhere (below);
+- the only change is an addon's name (C3 rewrites it by itself).
 
 ### Renames
 C3 identifies object types, variables, functions and most other things by a `sid` that
@@ -119,9 +137,17 @@ worked in one project:
 Names are matched ignoring case, like C3. A rename that only changes case updates the
 structured fields and leaves expressions alone, since C3 accepts either.
 
+**A name reused on the renaming side**: one side renames `Player` to `PlayerOld` and
+`PlayerNew` to `Player`, swaps two names, or creates a new object called `Player`. The
+other side's references to `Player` meant its `Player`, so they follow that object and
+become `PlayerOld`. The renaming side's own `Player` references stay.
+
 **Parameters added or removed**: the other side's calls that still use the old parameter
 count are fixed like C3 fixes them. A removed parameter's argument is dropped. An added
-parameter gets its default value, quoted when it's a string.
+parameter gets its default value, quoted when it's a string. After the merge, a call that
+may still be written for the old parameters (the count didn't change, e.g. one parameter
+replaced by another) is left alone with a warning: it can't be told from the renaming
+side's own call.
 
 **Conflict** when:
 - the parameters were reordered;
@@ -144,6 +170,14 @@ variables, the marker lets you keep both (then rename one in C3) or drop one.
 
 A rename can also cause this. One side adds a local variable `foo` next to `bar`, while
 the other renames `bar` to `foo`: **conflict**.
+
+### The same file holding a different object on each side
+One side renames `Enemy` away and another object to `Enemy`, or both sides create an
+`Enemy`. Git pairs files by path, so `objectTypes/Enemy.json` holds one object on one side
+and another on the other. Git's rename detection can also pair a deleted object's file with
+a similar new one (Under The Red Sky: `testChar` with `characterTest`). Merging its contents would mix the two: **conflict** on the whole
+file. Keep the object this file should hold; the other one's changes belong in its own
+file (the conflict names both).
 
 ### The same element replaced on both sides
 Both sides deleted the same event or action and put a different one in its place. Keeping
@@ -210,7 +244,9 @@ c3merge (game): check: 0 error(s), 0 warning(s)
 
 It compares names by `sid` between the common ancestor and the merged files, applies every
 rename to every event sheet, layout, family and the project file, and renames image files
-of new animation frames after their renamed object. The changes are left **uncommitted**,
+of new animation frames after their renamed object. A rename whose old name another object
+now has (`X → Y` while `Z → X`) only goes to the files the other branch brought, where `X`
+still means the old object, and so do fixes to calls whose parameters changed. The changes are left **uncommitted**,
 so you can open the project in C3 and look before committing. When git committed a clean
 merge right away, the fixes sit on top of that merge commit. Files still conflicted are
 skipped: run `c3merge finish` again once you've resolved them.
@@ -240,5 +276,5 @@ c3merge check game       # the project folder
 `check` loads the whole project and finds problems that span files, such as an instance
 of a type the other branch deleted, or a function called in one sheet and removed in
 another. It lists the ones that stop C3 from opening the project as errors. See
-[check.md](check.md). Then open the project in C3, look at anything listed under "check the
-order", and commit.
+[check.md](check.md). Then open the project in C3, look at anything listed under "check in
+the editor", and commit.

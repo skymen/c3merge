@@ -14,22 +14,18 @@ packaging/release · `[docs]`
 
 ## Now
 
-- [core] Renames carried across sides: when a renamed type's old name is reused on the same side (`X → Y` and `Z → X`), the other side's new `X` references are ambiguous → make it a conflict (skymen, 2026-09-24; important, needs investigating first, 2026-09-26). Signature changes adapt calls neither side touched (a stale extra argument dropped): maybe warn
-- [profiles] Project bar: an item added on both sides into different folders comes out listed twice, once per folder, merged "cleanly" with only an "added at the same place" warning (con-sule `4ce7cd9f6`: 14 layouts `vim_Level_*` in both `GreenGame🟩` and `GreenGame🟩/Levels`). Match items across folders, and add a `check` invariant "each item is listed once" (none today). Serious: C3 refuses to open a project with an entry listed in two folders ("Failed to read file objectTypes/Copies/Sprite.json", lab row 36c, all three releases) (found in the con-sule replay, 2026-09-26)
 
 ## Normal
 
-- [driver] `c3merge finish` after a cherry-pick stops with "no merge in progress, and HEAD isn't a merge commit" (exit 2), yet README and `docs/merging.md` say to run it by hand after one: `mergeBase("manual")` in `src/finish.ts` only knows `GITHEAD_*`, `MERGE_HEAD` and a merge commit at HEAD. During a cherry-pick `CHERRY_PICK_HEAD` exists (its parent is the base); after one, git records nothing. Support the first, or fix the docs (reproduced 2026-09-28)
-- [driver] `doctor` (and maybe `check`): warn when the project's `properties.uidAllocationMode` isn't `"random"` ("increment", or absent on old releases): each branch then hands out the same next uids, and c3merge takes two different instances for one and conflicts on every field. Flechita and Vicky are set to "increment" (Flechita `tavo` → `main`: 6 `ground` pairs, 30 of 36 conflicts; in Vicky the pairs aren't even the same type); con-sule and UTRS are "random". Fits the Notes entry: don't design the merge around collisions, tell the team to switch (2026-09-26)
-- [lab] Rows 36/36b/36c (set-list entries listed twice) are in `lab/corruptions.ts` but not in the matrix yet: run the full lab once to add them (results so far: 36 and 36b repair silently, 36c refuses, on all three releases) (2026-09-26)
-- [profiles] `usedAddons[].name` is display text: C3 rewrites every name on every save in the editor's language (brackets when the addon has no translation) and never reads it (a project with nonsense names opens normally). Never conflict on it: take ours (skymen, 2026-09-27) ([tasks/addon-names.md](tasks/addon-names.md))
+- [core] A wrong `Functions.f(…)` argument count inside an expression (the function's parameters changed on the other side) is reported as a conflict but gets no marker: the `flagLeftovers` callback in `src/engine/merge.ts` only writes a hunk for the `parameters` key. Git marks the file conflicted while it looks clean. Mark the expression (`as merged` / `fix in C3`) (found in review, 2026-09-29)
+- [driver] `c3merge finish` after a cherry-pick stops with "no merge in progress, and HEAD isn't a merge commit" (exit 2), yet README and `docs/merging.md` say to run it by hand after one: `mergePoints("manual")` in `src/finish.ts` only knows `GITHEAD_*`, `MERGE_HEAD` and a merge commit at HEAD. During a cherry-pick `CHERRY_PICK_HEAD` exists (its parent is the base); after one, git records nothing. Support the first, or fix the docs (reproduced 2026-09-28)
 
-- [check] After a merge: the driver only reminds people to run `check` (it can't tell which file is last). Group "type X doesn't exist" findings (one per instance today) ([tasks/check-validator.md](tasks/check-validator.md#when-to-run))
-- [driver] `c3merge resolve <file> --ours|--theirs`: take one side at every ours/theirs marker, keeping everything that merged cleanly (VS Code's "Accept All Current/Incoming" from the command line). Leave markers with other labels (`renamed (check)`, `fix in C3`, `keep both`). Small: a wrapper over `takeSide`, which every engine test case already runs; add one CLI test, since skymen won't test it by hand (2026-09-26)
 - [action] Release watch: a scheduled job tests each new C3 release once (lab rows + fidelity, against the last release that passed, in the same run) and opens an issue on a break, or comments on the open one ([tasks/release-watch.md](tasks/release-watch.md))
 
 ## Later
 
+- [profiles] `rootFileFolders` (sounds, music, scripts, files…): an item added into a different folder on each side still comes out listed twice (the folder pass only covers the object, layout, sheet… trees): items get a different sid per side, and where their files live on disk isn't checked. An item moved between folders on one side and edited on the other gives a deleted/changed hunk plus a plain copy, and taking theirs lists it twice; `moves: true` on `**.items[]` would replay the move (2026-09-29)
+- [profiles] A project-bar folder deleted on one side (its items moved to the parent) while the other side adds to it: taking theirs lists those items twice; `src/engine/folders.ts` doesn't see it (the folder is inside a hunk) (2026-09-29)
 - [profiles] An addon's `usedAddons[].version` changed on both sides (upgraded to different versions): take the higher version, and when the addon is bundled, take that same side's `.c3addon` under `addons/` (a binary file git can't merge; the driver only sees JSON today, so this needs a rule for bundled addon files or the finish step). 6 conflicts in UTRS (`Mikal_3DObject`, `mikal_rotate_shape`) (skymen, 2026-09-27)
 - [core] A set list with duplicate entries (family `members`, `usedAddons`) falls back to one whole-list conflict. Merge it as a set instead (duplicates collapse), at most a warning: C3 loads such a project and de-duplicates silently on r449-5, r495-2 and r503 (lab rows 36, 36b). 5 conflicts in Astral Ascent, 3 in con-sule (skymen, 2026-09-26)
 
@@ -50,6 +46,7 @@ packaging/release · `[docs]`
 
 ## Notes
 
+- A name reused on the renaming side (`X → Y` while `Z → X`, a swap, a new object with the old name) follows the object everywhere, no conflict: the other side's references meant their object (skymen, 2026-09-29).
 - No CI on purpose: `npm test` runs before every publish (`prepublishOnly`), which is enough (skymen, 2026-09-26).
 - The game's own version (`properties.version` in project.c3proj) changed on both sides stays a conflict (skymen, 2026-09-26).
 - No parameter-by-parameter merge of an action or condition edited on both sides (C3 gives it a new sid each time, so c3merge sees "replaced differently"): too dangerous (skymen, 2026-09-26).

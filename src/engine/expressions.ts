@@ -60,7 +60,7 @@ export const print = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 // One rename to apply. `owner` names the object type or family that has the variable or
 // behavior, in every form an expression may use for it (its names, the member types of a
 // family); `selfClasses` are the objectClass values for which `Self` means that owner.
-export interface MemberRename { kind: "var" | "behavior"; old: string; new: string; owner: Set<string>; selfClasses: Set<string> }
+export interface MemberRename { kind: "var" | "behavior"; old: string; new: string; owner: Set<string>; selfClasses: Set<string>; chain?: boolean }
 // `vars`: event variables in scope for this expression (bare names), `functions`: function
 // renames (`Functions.name(...)`); both old → new.
 export interface RenameSet { types: Record<string, string>; members: MemberRename[]; vars?: Record<string, string>; functions?: Record<string, string> }

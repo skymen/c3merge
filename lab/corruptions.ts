@@ -1,7 +1,7 @@
 // The lab's corruptions: each one applies exactly one change to a copy of fixtures/lab-base
 // (see tasks/lab-experiments.md for the matrix). Rows whose `needs` isn't in the base
 // project yet are skipped with that reason.
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { encodeTiles, tileRuns } from "../src/engine/tiles.ts";
 
@@ -234,6 +234,15 @@ export const corruptions: Corruption[] = [
   { row: "36c", title: "project-bar entry listed twice (in two folders)",
     apply: (d) => editJson(d, C3PROJ, (p) => { p.objectTypes.subfolders.push({ items: ["Sprite"], subfolders: [], name: "Copies" }); }),
     present: async (d) => { const p = await readJson(d, C3PROJ); const names: string[] = []; const w = (f: Json) => { names.push(...(f.items ?? [])); (f.subfolders ?? []).forEach(w); }; w(p.objectTypes); return hasDup(names); } },
+  // What a merge of two branches adding the same layout into different folders leaves
+  // (con-sule 4ce7cd9f6): listed in both, a file in each.
+  { row: "36d", title: "project-bar entry listed twice (in two folders), its file in both",
+    apply: async (d) => {
+      await editJson(d, C3PROJ, (p) => { p.layouts.subfolders.push({ items: ["Layout 2"], subfolders: [], name: "Copies" }); });
+      await mkdir(path.join(d, "layouts/Copies"), { recursive: true });
+      await writeFile(path.join(d, "layouts/Copies/Layout 2.json"), await readFile(path.join(d, "layouts/Layout 2.json"), "utf8"));
+    },
+    present: async (d) => { const p = await readJson(d, C3PROJ); const names: string[] = []; const w = (f: Json) => { names.push(...(f.items ?? [])); (f.subfolders ?? []).forEach(w); }; w(p.layouts); return hasDup(names); } },
 ];
 
 async function addGroupNamed(d: string, name: (title: string) => string) {

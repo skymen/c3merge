@@ -6,6 +6,7 @@ export type Rule =
   | { id: string[]; also?: string[]; moves?: boolean; repeats?: boolean; order: "ordered" | "set" }
   | { atomic: true }
   | { scalar: "max" }
+  | { ours: true }
   | { lines: true }
   | { tiles: true };
 

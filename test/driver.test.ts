@@ -6,7 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { init, install, installHooks } from "../src/driver.ts";
+import { doctor, init, install, installHooks } from "../src/driver.ts";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const LAB = path.join(ROOT, "fixtures", "lab-base");
@@ -49,6 +49,20 @@ function branchesAddingObjects(r: ReturnType<typeof repo>) {
   r.commit("add Player, Enemy");
 }
 
+test("doctor: warns (without failing) when a project's UIDs aren't random", () => {
+  const r = repo();
+  try {
+    const uidWarning = () => doctor(r.dir).filter((l) => /increasing UIDs/.test(l.text));
+    const lines = uidWarning();
+    assert.equal(lines.length, 1, "lab-base is set to increment");
+    assert.ok(lines[0].ok && lines[0].warn && /UID numbering → Random/.test(lines[0].fix ?? ""));
+    r.edit("project.c3proj", (v) => { v.properties.uidAllocationMode = "random"; });
+    assert.deepEqual(uidWarning(), []);
+    r.edit("project.c3proj", (v) => { delete v.properties.uidAllocationMode; });
+    assert.match(uidWarning()[0].text, /no UID numbering setting/, "old projects have none");
+  } finally { r.cleanup(); }
+});
+
 test("merge: both branches create object types → merged, no conflict", () => {
   const r = repo();
   try {
@@ -82,6 +96,26 @@ test("merge: same layer property changed differently → conflict markers, path 
     assert.match(text, /"width": 1234/, "the clean part is merged");
     const log = readFileSync(path.join(r.dir, ".git", "c3merge", "conflicts.md"), "utf8");
     assert.match(log, /layers\[Layer 0\]\.parallaxX: changed on both sides/);
+  } finally { r.cleanup(); }
+});
+
+test("resolve --theirs: one side at every conflict, what merged cleanly kept, C3's format", () => {
+  const r = repo();
+  try {
+    r.git("checkout", "-qb", "feature");
+    r.edit("layouts/Layout 1.json", (v) => { v.layers[0].parallaxX = 80; }); r.commit("80");
+    r.git("checkout", "-q", "main");
+    r.edit("layouts/Layout 1.json", (v) => { v.layers[0].parallaxX = 50; v.width = 1234; }); r.commit("50");
+    assert.notEqual(r.run("merge", "--no-edit", "feature").status, 0);
+    const res = spawnSync(process.execPath, ["--import", TSX, CLI, "resolve", r.file("layouts/Layout 1.json"), "--theirs"], { cwd: r.dir, encoding: "utf8" });
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /took theirs at 1 conflict\(s\); `git add` it/);
+    const text = r.read("layouts/Layout 1.json"), v = JSON.parse(text);
+    assert.equal(v.layers[0].parallaxX, 80);
+    assert.equal(v.width, 1234, "the clean part is kept");
+    assert.ok(!text.endsWith("\n") && !text.includes("<<<<<<<"), "C3's format, no markers");
+    const usage = spawnSync(process.execPath, ["--import", TSX, CLI, "resolve", r.file("layouts/Layout 1.json")], { cwd: r.dir, encoding: "utf8" });
+    assert.equal(usage.status, 2, "a side is required");
   } finally { r.cleanup(); }
 });
 
@@ -164,6 +198,36 @@ test("finish step: after a clean merge, renames reach files the merge didn't, le
     assert.match(r.git("status", "--porcelain"), /^ M "?game\/layouts\/Layout 3\.json"?$/m, "left for review");
     assert.ok(!r.read("layouts/Layout 3.json").endsWith("\n"), "C3's format");
   } finally { r.cleanup(); }
+});
+
+// One side renames Sprite → Hero, then TiledBackground → Sprite (a chain); the other adds
+// Layout 3 (a copy of Layout 1: Sprite#2, TiledBackground#3, Sprite#7), a file only it has.
+// Its instances meant their objects: Sprite → Hero, TiledBackground → Sprite.
+test("finish step: a chain of renames reaches the other side's new file by object, after a merge or a rebase", () => {
+  for (const [op, renamer] of [["merge", "main"], ["merge", "feature"], ["rebase", "main"]] as const) {
+    const r = repo();
+    try {
+      installHooks(r.dir, C3MERGE);
+      const addLayout3 = () => {
+        const l3 = JSON.parse(r.read("layouts/Layout 1.json"));
+        Object.assign(l3, { name: "Layout 3", sid: 333333333333333 });
+        writeFileSync(r.file("layouts/Layout 3.json"), c3(l3));
+        r.edit("project.c3proj", (v) => v.layouts.items.push("Layout 3"));
+        r.commit("Layout 3");
+      };
+      const chain = () => { renameType(r, "Sprite", "Hero"); renameType(r, "TiledBackground", "Sprite"); r.commit("Sprite → Hero, TiledBackground → Sprite"); };
+      r.git("checkout", "-qb", "feature");
+      if (renamer === "feature") chain(); else addLayout3();
+      r.git("checkout", "-q", "main");
+      if (renamer === "main") chain(); else addLayout3();
+      const res = op === "merge" ? r.run("merge", "--no-edit", "feature") : (r.git("checkout", "-q", "feature"), r.run("rebase", "main"));
+      assert.equal(res.status, 0, `${op}/${renamer}: ${res.stdout}${res.stderr}`);
+      const types = JSON.parse(r.read("layouts/Layout 3.json")).layers[0].instances.map((i: any) => `${i.type}#${i.uid}`);
+      assert.deepEqual(types, ["Hero#2", "Sprite#3", "Hero#7"], `${op}/${renamer}: ${res.stderr}`);
+      const l1 = JSON.parse(r.read("layouts/Layout 1.json")).layers[0].instances.map((i: any) => `${i.type}#${i.uid}`);
+      assert.deepEqual(l1, ["Hero#2", "Sprite#3", "Hero#7"], `${op}/${renamer}: the renaming side's own file untouched`);
+    } finally { r.cleanup(); }
+  }
 });
 
 test("a project folder with a non-ASCII name: the driver and the finish step still see the project", () => {

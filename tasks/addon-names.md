@@ -1,7 +1,8 @@
 # Addon names in project.c3proj follow the editor's language
 
 **Status:** investigated in C3 (r495-2, 2026-09-26): the name is display text C3 writes on
-every save and never reads. Fix: never conflict on it (NOTES.md). Script:
+every save and never reads. Fixed (2026-09-29): `usedAddons[].name` takes ours (profile rule
+`ours`), and an entry deleted on one side and only renamed on the other is deleted. Script:
 `fixtures/real/common/addon-names.ts` (results in `addon-names.json` next to it).
 
 ## What C3 does (r495-2, lab project and con-sule, fresh profiles)

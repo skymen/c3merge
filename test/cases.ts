@@ -84,6 +84,7 @@ const table = (...ts: T[]): Table => Object.fromEntries(ts.map((t) => [t.sid, {
 const ctx = (base: T[], ours: T[], theirs: T[]): ProjectContext => ({ base: table(...base), ours: table(...ours), theirs: table(...theirs) });
 const SPRITE_T: T = { sid: 1, name: "Sprite", vars: [[11, "myVar"], [12, "myVarToo"], [13, "myBool"]], behaviors: [[21, "Bullet"]] };
 const TB_T: T = { sid: 2, name: "TiledBackground" };
+const SHAPE_T: T = { sid: 5, name: "3DShape", plugin: "Shape3D" };
 const FAM_T: T = { sid: 3, name: "Family1", family: ["Sprite"], vars: [[31, "fv"]] };
 const with_ = (t: T, change: Partial<T>): T => ({ ...t, ...change });
 const SPRITE_RENAMED_VAR = with_(SPRITE_T, { vars: [[11, "speed"], [12, "myVarToo"], [13, "myBool"]] });
@@ -138,6 +139,17 @@ const usesSprite = (name: string) => ({
   parameters: { x: `${name}.X + 1`, text: '"Sprite.X"', object: name, "instance-variable": "Sprite" },
 });
 const addon = (id: string, version = "1.0.0.0") => ({ type: "plugin", id, name: id, author: "someone", bundled: true, version });
+// An action on an object, by the name its side calls it.
+const usesObj = (name: string, sid: number) => ({ id: "set-x", objectClass: name, sid, parameters: { x: `${name}.X + 1` } });
+const addActionAt = (at: number, a: object): Edit => (v) => { block(v).actions.splice(at, 0, a); };
+// What C3 does on the renaming side: every action's objectClass follows its object.
+const renameClasses = (map: Record<string, string>): Edit => (v) => {
+  for (const a of block(v).actions) if (a.objectClass in map) a.objectClass = map[a.objectClass];
+};
+const renameInstanceTypes = (map: Record<string, string>): Edit => (v) => {
+  for (const l of v.layers) for (const i of l.instances) if (i.type in map) i.type = map[i.type];
+};
+const replaceParam: Edit = (v) => { fn1(v).functionParameters = [{ name: "speed", type: "number", initialValue: "5", comment: "", sid: 777 }]; };
 
 export const CASES: Case[] = [
   // ── objects and scalars ─────────────────────────────────────────────────────────────
@@ -463,6 +475,111 @@ export const CASES: Case[] = [
     takeTheirs: both((v) => { call1(v).parameters = ["67", "5"]; }, addAction({ callFunction: "Function1", sid: 918, parameters: ["1", "2", "3"] })),
   },
 
+  // ── a name reused on the renaming side: everything follows its object ──────────────
+  {
+    // Theirs: Sprite → Hero, then 3DShape → Sprite. Ours' "Sprite" is the Hero now; theirs'
+    // own "Sprite" is the former 3DShape and stays.
+    name: "chain of renames on one side: each side's references follow their object",
+    file: ES1,
+    context: ctx([SPRITE_T, SHAPE_T], [SPRITE_T, SHAPE_T], [with_(SPRITE_T, { name: "Hero" }), with_(SHAPE_T, { name: "Sprite" })]),
+    ours: addActionAt(0, usesObj("Sprite", 781)),
+    theirs: both(renameClasses({ Sprite: "Hero", "3DShape": "Sprite" }), addAction(usesObj("Sprite", 782))),
+    merged: both(renameClasses({ Sprite: "Hero", "3DShape": "Sprite" }), addAction(usesObj("Sprite", 782)), addActionAt(0, usesObj("Hero", 781))),
+  },
+  {
+    name: "two types swap names on one side: each side's references follow their object",
+    file: ES1,
+    context: ctx([SPRITE_T, TB_T], [with_(SPRITE_T, { name: "TiledBackground" }), with_(TB_T, { name: "Sprite" })], [SPRITE_T, TB_T]),
+    ours: both(renameClasses({ Sprite: "TiledBackground", TiledBackground: "Sprite" }), addActionAt(0, usesObj("Sprite", 783))),
+    theirs: both(addAction(usesObj("Sprite", 784)), addAction(usesObj("TiledBackground", 785))),
+    merged: both(renameClasses({ Sprite: "TiledBackground", TiledBackground: "Sprite" }), addActionAt(0, usesObj("Sprite", 783)),
+      addAction(usesObj("TiledBackground", 784)), addAction(usesObj("Sprite", 785))),
+  },
+  {
+    name: "a type renamed and a new one created with its old name on one side: each side's references follow their object",
+    file: ES1,
+    context: ctx([SPRITE_T], [SPRITE_T], [with_(SPRITE_T, { name: "Hero" }), { sid: 6, name: "Sprite" }]),
+    ours: addActionAt(0, usesObj("Sprite", 789)),
+    theirs: both(renameClasses({ Sprite: "Hero" }), addAction(usesObj("Sprite", 790))),
+    merged: both(renameClasses({ Sprite: "Hero" }), addAction(usesObj("Sprite", 790)), addActionAt(0, usesObj("Hero", 789))),
+  },
+  {
+    // Ours: Variable1 → Speed, then Variable2 → Variable1.
+    name: "global variables renamed in a chain on one side: each side's references follow their variable",
+    file: ES1, context: evCtx([], [(v) => { v.events[0].name = "Speed"; v.events[1].name = "Variable1"; }], []),
+    ours: both((v) => { v.events[0].name = "Speed"; v.events[1].name = "Variable1"; },
+      addActionAt(0, { id: "set-eventvar-value", objectClass: "System", sid: 791, parameters: { variable: "Variable1", value: "Variable1 + 1" } })),
+    theirs: both(addAction({ id: "set-eventvar-value", objectClass: "System", sid: 792, parameters: { variable: "Variable1", value: "Variable2" } })),
+    merged: both((v) => { v.events[0].name = "Speed"; v.events[1].name = "Variable1"; },
+      addActionAt(0, { id: "set-eventvar-value", objectClass: "System", sid: 791, parameters: { variable: "Variable1", value: "Variable1 + 1" } }),
+      addAction({ id: "set-eventvar-value", objectClass: "System", sid: 792, parameters: { variable: "Speed", value: "Variable1" } })),
+  },
+  {
+    name: "chain of renames on one side: the other side's new instance follows its object",
+    file: L1,
+    context: ctx([SPRITE_T, TB_T], [SPRITE_T, TB_T], [with_(SPRITE_T, { name: "Hero" }), with_(TB_T, { name: "Sprite" })]),
+    ours: addInst(50, "end"),
+    theirs: renameInstanceTypes({ Sprite: "Hero", TiledBackground: "Sprite" }),
+    merged: both(renameInstanceTypes({ Sprite: "Hero", TiledBackground: "Sprite" }), addInst(50, "end"), (v) => { inst(v, 50).type = "Hero"; }),
+  },
+  {
+    // Theirs: Sprite → Hero with its myVar → speed, and TiledBackground → Sprite (which has a
+    // myVar of its own). Only the former Sprite's variable is renamed.
+    name: "chain of renames and a variable renamed on one side: only its own object's instances follow",
+    file: L1,
+    context: ctx([SPRITE_T, with_(TB_T, { vars: [[41, "myVar"]] })], [SPRITE_T, with_(TB_T, { vars: [[41, "myVar"]] })],
+      [with_(SPRITE_T, { name: "Hero", vars: [[11, "speed"], [12, "myVarToo"], [13, "myBool"]] }), with_(TB_T, { name: "Sprite", vars: [[41, "myVar"]] })]),
+    ours: both(addInst(50, "end"), (v) => { inst(v, 3).instanceVariables = { myVar: 5 }; }),
+    theirs: both(renameVarOnInstances, renameInstanceTypes({ Sprite: "Hero", TiledBackground: "Sprite" })),
+    merged: both(renameVarOnInstances, renameInstanceTypes({ Sprite: "Hero", TiledBackground: "Sprite" }), addInst(50, "end"), (v) => {
+      inst(v, 50).type = "Hero";
+      inst(v, 50).instanceVariables = Object.fromEntries(Object.entries(inst(v, 50).instanceVariables).map(([k, x]) => [k === "myVar" ? "speed" : k, x]));
+      inst(v, 3).instanceVariables = { myVar: 5 };
+    }),
+  },
+  {
+    // C3 renames the keys in place; each value stays with its variable.
+    name: "instance variables swap names on one side, a value edited on the other",
+    file: L1,
+    context: ctx([SPRITE_T], [with_(SPRITE_T, { vars: [[11, "myVarToo"], [12, "myVar"], [13, "myBool"]] })], [SPRITE_T]),
+    ours: (v) => { inst(v, 2).instanceVariables = { myVarToo: 0, myVar: "hello", myBool: false }; },
+    theirs: (v) => { inst(v, 2).instanceVariables.myVar = 42; },
+    merged: (v) => { inst(v, 2).instanceVariables = { myVarToo: 42, myVar: "hello", myBool: false }; },
+  },
+  {
+    // Ours: Bullet → Mover, then Platform → Bullet (listed in that table order: Platform first).
+    name: "behaviors renamed in a chain on one side: each side's actions follow their behavior",
+    file: ES1,
+    context: ctx([with_(SPRITE_T, { behaviors: [[22, "Platform"], [21, "Bullet"]] })], [with_(SPRITE_T, { behaviors: [[22, "Bullet"], [21, "Mover"]] })], [with_(SPRITE_T, { behaviors: [[22, "Platform"], [21, "Bullet"]] })]),
+    ours: addActionAt(0, { id: "set-enabled", objectClass: "Sprite", behaviorType: "Bullet", sid: 786, parameters: { state: "enabled" } }),
+    theirs: both(addAction({ id: "set-enabled", objectClass: "Sprite", behaviorType: "Platform", sid: 787, parameters: { state: "enabled" } }),
+      addAction({ id: "set-enabled", objectClass: "Sprite", behaviorType: "Bullet", sid: 788, parameters: { state: "enabled" } })),
+    merged: both(addActionAt(0, { id: "set-enabled", objectClass: "Sprite", behaviorType: "Bullet", sid: 786, parameters: { state: "enabled" } }),
+      addAction({ id: "set-enabled", objectClass: "Sprite", behaviorType: "Bullet", sid: 787, parameters: { state: "enabled" } }),
+      addAction({ id: "set-enabled", objectClass: "Sprite", behaviorType: "Mover", sid: 788, parameters: { state: "enabled" } })),
+  },
+  {
+    // One parameter replaced by another: the count doesn't change, so after the merge a call
+    // can't be told old from new. Ours' own new call keeps its argument; flagged, not rewritten.
+    name: "function parameter replaced on one side (same count): that side's new call keeps its argument",
+    file: ES1, context: evCtx([], [undefined, replaceParam], []),
+    ours: both((v) => { call1(v).parameters = ["5"]; }, addActionAt(0, { callFunction: "Function1", sid: 919, parameters: ["9"] })),
+    theirs: touchSheet,
+    merged: both((v) => { call1(v).parameters = ["5"]; }, touchSheet, addActionAt(0, { callFunction: "Function1", sid: 919, parameters: ["9"] })),
+    warnings: ["function Function1 (sid 919) parameter parameters", "function Function1 (sid 648913729152520) parameter parameters"],
+  },
+  {
+    // Theirs renamed Sprite away and another type to Sprite: git pairs the file by path, so
+    // this file is one object on ours and another on theirs.
+    name: "a different object at the same path on each side: whole-file conflict",
+    file: SPRITE,
+    ours: (v) => { v.isGlobal = true; },
+    theirs: (v) => { v.sid = 424242424242; v["plugin-id"] = "TiledBg"; },
+    conflicts: ["(whole file)"],
+    takeOurs: (v) => { v.isGlobal = true; },
+    takeTheirs: (v) => { v.sid = 424242424242; v["plugin-id"] = "TiledBg"; },
+  },
+
   // ── event sheets (execution order) ──────────────────────────────────────────────────
   {
     name: "events added at different spots",
@@ -608,6 +725,35 @@ export const CASES: Case[] = [
     merged: (v) => { v.objectTypes.subfolders[0].items.push("Bat", "Rat"); },
   },
   {
+    // con-sule 4ce7cd9f6: the same layouts added into different folders on each side.
+    name: "the same layout added into a different folder on each side: each copy is one side",
+    file: PROJ,
+    base: (v) => { v.layouts.subfolders.push({ items: [], subfolders: [], name: "Levels" }); },
+    ours: (v) => { v.layouts.items.push("Level 1"); },
+    theirs: (v) => { v.layouts.subfolders[0].items.push("Level 1"); },
+    conflicts: ['layouts in "(top)" and "Levels"'],
+    takeOurs: (v) => { v.layouts.items.push("Level 1"); },
+    takeTheirs: (v) => { v.layouts.subfolders[0].items.push("Level 1"); },
+  },
+  {
+    name: "an object type moved into a different folder on each side: each copy is one side",
+    file: PROJ,
+    base: (v) => { v.objectTypes.subfolders.push({ items: [], subfolders: [], name: "Enemies" }, { items: [], subfolders: [], name: "Props" }); },
+    ours: (v) => { v.objectTypes.items = v.objectTypes.items.filter((n: string) => n !== "Sprite"); v.objectTypes.subfolders[0].items.push("Sprite"); },
+    theirs: (v) => { v.objectTypes.items = v.objectTypes.items.filter((n: string) => n !== "Sprite"); v.objectTypes.subfolders[1].items.push("Sprite"); },
+    conflicts: ['objectTypes in "Enemies" and "Props"'],
+    takeOurs: (v) => { v.objectTypes.items = v.objectTypes.items.filter((n: string) => n !== "Sprite"); v.objectTypes.subfolders[0].items.push("Sprite"); },
+    takeTheirs: (v) => { v.objectTypes.items = v.objectTypes.items.filter((n: string) => n !== "Sprite"); v.objectTypes.subfolders[1].items.push("Sprite"); },
+  },
+  {
+    name: "a layout moved into a folder on one side, another added on the other: merged",
+    file: PROJ,
+    base: (v) => { v.layouts.subfolders.push({ items: [], subfolders: [], name: "Levels" }); },
+    ours: (v) => { v.layouts.items = ["Layout 1"]; v.layouts.subfolders[0].items.push("Layout 2"); },
+    theirs: (v) => { v.layouts.items.push("Menu"); },
+    merged: (v) => { v.layouts.items = ["Layout 1", "Menu"]; v.layouts.subfolders[0].items.push("Layout 2"); },
+  },
+  {
     name: "addons added on both sides",
     file: PROJ,
     ours: (v) => { v.usedAddons.push(addon("MyPlugin")); },
@@ -622,6 +768,21 @@ export const CASES: Case[] = [
     conflicts: ["usedAddons[type=plugin,id=MyPlugin].version"],
     takeOurs: (v) => { v.usedAddons.push(addon("MyPlugin", "1.0.0.0")); },
     takeTheirs: (v) => { v.usedAddons.push(addon("MyPlugin", "1.1.0.0")); },
+  },
+  {
+    // C3 rewrites addon names in the editor's language on every save and never reads them.
+    name: "an addon's name changed differently on both sides: ours",
+    file: PROJ,
+    ours: (v) => { v.usedAddons.find((a: any) => a.id === "TiledBg").name = "Arrière-plan en mosaïque"; },
+    theirs: (v) => { v.usedAddons.find((a: any) => a.id === "TiledBg").name = "[Tiled Background]"; },
+    merged: (v) => { v.usedAddons.find((a: any) => a.id === "TiledBg").name = "Arrière-plan en mosaïque"; },
+  },
+  {
+    name: "an addon removed on one side, only its name changed on the other: removed",
+    file: PROJ,
+    ours: (v) => { v.usedAddons = v.usedAddons.filter((a: any) => a.id !== "Tilemap"); },
+    theirs: (v) => { v.usedAddons.find((a: any) => a.id === "Tilemap").name = "Carte de tuiles"; },
+    merged: (v) => { v.usedAddons = v.usedAddons.filter((a: any) => a.id !== "Tilemap"); },
   },
   {
     name: "saved with different releases: the newer one",

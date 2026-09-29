@@ -3,6 +3,12 @@
 **Status:** built (2026-09-24): `src/context.ts` (event tables), `src/engine/renames.ts`
 (scoped tree walk, calls), `src/engine/expressions.ts` (bare names, `Functions.name(`), finish
 step included. Verified against C3's own commits (below).
+Chains (2026-09-29): a rename whose old name another object carries on the renaming side
+(X → Y while Z → X, a swap, a new object with the old name) follows the object everywhere
+(skymen). It's applied once before the merge; the post-merge pass and the finish step leave
+it out, except the finish step on the files the other branch brought (found from the
+branch's tip). Member renames go in one pass; after the merge, calls that may still use a
+signature's old parameters get a warning instead of a rewrite.
 
 ## How often (Under The Red Sky, 889 commits that changed event sheets, by sid)
 `scripts/event-renames.ts`:

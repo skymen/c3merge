@@ -42,8 +42,16 @@ function hasConflict(v: unknown): boolean {
 const markers = (labels?: [string, string]) => (labels ? [`<<<<<<< ${labels[0]}`, `>>>>>>> ${labels[1]}`] : [MARKER.ours, MARKER.theirs]);
 
 interface Entry { key?: string; value: unknown }
-type Item = Entry | { ours: Entry[]; theirs: Entry[]; labels?: [string, string] };
-const isHunk = (i: Item): i is { ours: Entry[]; theirs: Entry[] } => "ours" in i;
+interface Hunk { ours: Entry[]; theirs: Entry[]; labels?: [string, string] }
+type Item = Entry | Hunk;
+const isHunk = (i: Item): i is Hunk => "ours" in i;
+const oneSided = (i: Item) => isHunk(i) && (i.ours.length === 0) !== (i.theirs.length === 0);
+// Hunks with different labels made into one: each side's labels, joined.
+function joinLabels(hunks: Hunk[]): [string, string] | undefined {
+  if (hunks.every((h) => String(h.labels) === String(hunks[0].labels))) return hunks[0].labels;
+  const side = (i: 0 | 1) => [...new Set(hunks.map((h) => (h.labels ?? [MARKER.ours.slice(8), MARKER.theirs.slice(8)])[i]))].join(" + ");
+  return [side(0), side(1)];
+}
 
 function valueLines(v: unknown, style: Style, depth: number, prefix: string, suffix: string): string[] {
   const pad = style.indent.repeat(depth);
@@ -67,12 +75,21 @@ function valueLines(v: unknown, style: Style, depth: number, prefix: string, suf
         : { key, value: e });
     }
   }
-  // A hunk at the end where one side is empty: the comma of the item before it depends on
-  // the side taken, so that item goes into the hunk too.
-  const last = items.at(-1)!;
-  if (isHunk(last) && (last.ours.length === 0) !== (last.theirs.length === 0) && items.length > 1 && !isHunk(items.at(-2)!)) {
-    const prev = items.splice(-2, 1)[0] as Entry;
-    last.ours.unshift(prev); last.theirs.unshift(prev);
+  // A hunk at the end where one side is empty: the comma of whatever comes before it depends
+  // on the side taken. Hunks right before it (other labels) join it, and if the result still
+  // has an empty side, the item before it goes into the hunk too.
+  if (oneSided(items.at(-1)!)) {
+    let k = items.length - 1;
+    while (k > 0 && isHunk(items[k - 1])) k--;
+    if (k < items.length - 1) {
+      const trail = items.splice(k) as Hunk[];
+      items.push({ ours: trail.flatMap((h) => h.ours), theirs: trail.flatMap((h) => h.theirs), labels: joinLabels(trail) });
+    }
+    const last = items.at(-1) as Hunk;
+    if (oneSided(last) && items.length > 1 && !isHunk(items.at(-2)!)) {
+      const prev = items.splice(-2, 1)[0] as Entry;
+      last.ours.unshift(prev); last.theirs.unshift(prev);
+    }
   }
   const entry = (e: Entry, comma: boolean) =>
     valueLines(e.value, style, depth + 1, e.key === undefined ? "" : `${JSON.stringify(e.key)}: `, comma ? "," : "");
@@ -89,7 +106,36 @@ function valueLines(v: unknown, style: Style, depth: number, prefix: string, suf
   return out;
 }
 
-// Resolve every hunk to one side (tests, and `c3merge resolve` later).
+// `c3merge resolve`: one side at every plain ours/theirs hunk; hunks with other labels
+// ("renamed (check)", "fix in C3", "keep both…") are kept as they are, for a person. A diff3
+// base section (||||||| …, git's own merge with merge.conflictStyle=diff3) is dropped. Hunks
+// may nest. Line endings and the final newline stay as they were.
+export function resolveBranches(text: string, which: "ours" | "theirs"): { text: string; resolved: number; left: string[] } {
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const out: string[] = [], left: string[] = [];
+  const stack: { branch: boolean; part: "ours" | "base" | "theirs"; label: string }[] = [];
+  let resolved = 0;
+  // A line inside the stack shows when every branch hunk around it is on the side taken.
+  const shown = (depth = stack.length) => stack.slice(0, depth).every((f) => !f.branch || f.part === which);
+  for (const line of text.split(/\r?\n/)) {
+    const top = stack.at(-1);
+    if (line.startsWith("<<<<<<< ")) {
+      const label = line.slice(8);
+      stack.push({ branch: label === "ours", part: "ours", label });
+      if (label !== "ours" && shown(stack.length - 1)) out.push(line);
+    } else if (top && (line === MARKER.sep || line.startsWith("|||||||"))) {
+      if (!top.branch && shown(stack.length - 1)) out.push(line);
+      top.part = line === MARKER.sep ? "theirs" : "base";
+    } else if (top && line.startsWith(">>>>>>> ")) {
+      stack.pop();
+      if (top.branch) resolved++;
+      else if (shown()) { out.push(line); left.push(`${top.label} / ${line.slice(8)}`); }
+    } else if (shown()) out.push(line);
+  }
+  return { text: out.join(eol), resolved, left };
+}
+
+// Resolve every hunk to one side, whatever its labels (tests).
 export function takeSide(text: string, which: "ours" | "theirs"): string {
   const out: string[] = [];
   let state: "none" | "ours" | "theirs" = "none";

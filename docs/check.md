@@ -12,13 +12,14 @@ c3merge check game.c3p             # or a .c3p
 ```
 
 ```
-error   layouts/Level 1.json: instance uid 12 has type "TiledShapeDark", which doesn't exist  [instance-type-exists]
+error   layouts/Level 1.json: 14 instances have type "TiledShapeDark", which doesn't exist (uids 12, 15, 18, 20, 21, …)  [instance-type-exists]
 warning eventSheets/Main.json: global variable "score" is declared more than once  [global-var-unique]
 
 1 error(s), 1 warning(s), 0 info
 ```
 
-The exit code is 1 when there is at least one error, and 0 otherwise.
+The exit code is 1 when there is at least one error, and 0 otherwise. References to one
+missing object type or function are grouped per file: one line for 14 instances, not 14.
 
 It runs by itself at the end of the [finish step](merging.md#renames-and-the-finish-step)
 after each merge, which only prints the counts. Run it by hand for the details.
@@ -50,6 +51,7 @@ behaviour seen on any of them, since each team member may use a different releas
 |---|---|---|
 | error | `json-parse` | every JSON file parses |
 | error | `listed-file-missing` | every item the `.c3proj` lists has its file |
+| error | `listed-once` | each item is listed once in the project bar (C3 refuses an item listed in two folders, even with its file in both) |
 | error | `unlisted-file` | every item file is listed in the `.c3proj`: C3 opens the project without it and loses it on the next save |
 | error | `instance-type-exists` | every instance's type exists |
 | error | `instance-world-present` | every layout instance has world data |

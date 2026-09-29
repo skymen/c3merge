@@ -43,6 +43,19 @@ function duplicates<T>(xs: T[]): Set<T> {
   return dup;
 }
 
+// References to one missing name, grouped per file: one finding for 14 instances of a
+// deleted type, not 14.
+function perName<T>(xs: T[], file: (x: T) => string, name: (x: T) => string): { file: string; name: string; xs: T[] }[] {
+  const out = new Map<string, { file: string; name: string; xs: T[] }>();
+  for (const x of xs) {
+    const k = `${file(x)}\0${name(x)}`;
+    if (!out.has(k)) out.set(k, { file: file(x), name: name(x), xs: [] });
+    out.get(k)!.xs.push(x);
+  }
+  return [...out.values()];
+}
+const upTo5 = (l: unknown[]) => `${l.slice(0, 5).join(", ")}${l.length > 5 ? ", …" : ""}`;
+
 // Families a type belongs to, for variables/effects/behaviors inherited from a family.
 function familiesOf(p: Project, typeName: string): Json[] {
   return p.items("families").map((f) => f.json).filter((f) => (f.members ?? []).includes(typeName));
@@ -71,11 +84,26 @@ export const invariants: Invariant[] = [
     },
   },
   {
+    // What a merge of both sides adding an item into different folders leaves (con-sule).
+    id: "listed-once", title: "each item is listed once in the project bar", labRows: ["36c", "36d"],
+    check: (p) => {
+      const byName = new Map<string, string[]>();
+      for (const l of p.listed) { const k = `${l.kind}\0${l.name}`; byName.set(k, [...(byName.get(k) ?? []), l.rel]); }
+      return [...byName].filter(([, rels]) => rels.length > 1).map(([k, rels]) => {
+        const [kind, name] = k.split("\0");
+        return { invariant: "listed-once", file: "project.c3proj", message: `${kind} "${name}" is listed ${rels.length} times (${rels.join(", ")}); keep one, and delete the other file` };
+      });
+    },
+  },
+  {
     id: "instance-type-exists", title: "every instance's type exists", labRows: ["1"],
     check: (p) => {
       const types = new Set(p.items("objectTypes").map((t) => t.json.name));
-      return instances(p).filter(({ inst }) => !types.has(inst.type))
-        .map(({ file, inst }) => ({ invariant: "instance-type-exists", file, message: `instance uid ${inst.uid} has type "${inst.type}", which doesn't exist` }));
+      return perName(instances(p).filter(({ inst }) => !types.has(inst.type)), (x) => x.file, (x) => x.inst.type).map(({ file, name, xs }) => ({
+        invariant: "instance-type-exists", file,
+        message: xs.length === 1 ? `instance uid ${xs[0].inst.uid} has type "${name}", which doesn't exist`
+          : `${xs.length} instances have type "${name}", which doesn't exist (uids ${upTo5(xs.map((x) => x.inst.uid))})`,
+      }));
     },
   },
   {
@@ -136,18 +164,25 @@ export const invariants: Invariant[] = [
     check: (p) => {
       // Built-in objects that aren't project types: the only two across the 47-project corpus.
       const known = new Set(["System", "Functions", ...p.items("objectTypes").map((t) => t.json.name), ...p.items("families").map((f) => f.json.name)]);
-      return p.items("eventSheets").flatMap((s) => allEvents(s.json.events).flatMap(acesOf)
-        .filter((a) => a.objectClass !== undefined && !known.has(a.objectClass))
-        .map((a) => ({ invariant: "object-class-exists", file: s.rel, message: `${a.id ?? "an ACE"} uses object "${a.objectClass}", which doesn't exist` })));
+      const uses = p.items("eventSheets").flatMap((s) => allEvents(s.json.events).flatMap(acesOf)
+        .filter((a) => a.objectClass !== undefined && !known.has(a.objectClass)).map((a) => ({ file: s.rel, a })));
+      return perName(uses, (x) => x.file, (x) => x.a.objectClass).map(({ file, name, xs }) => ({
+        invariant: "object-class-exists", file,
+        message: xs.length === 1 ? `${xs[0].a.id ?? "an ACE"} uses object "${name}", which doesn't exist`
+          : `${xs.length} conditions and actions use object "${name}", which doesn't exist (${upTo5([...new Set(xs.map((x) => x.a.id ?? "?"))])})`,
+      }));
     },
   },
   {
     id: "function-exists", title: "function calls point to existing functions", labRows: ["13"],
     check: (p) => {
       const fns = new Set(p.items("eventSheets").flatMap((s) => allEvents(s.json.events).filter((e) => e.eventType === "function-block").map((e) => e.functionName)));
-      return p.items("eventSheets").flatMap((s) => allEvents(s.json.events).flatMap(acesOf)
-        .filter((a) => a.callFunction !== undefined && !fns.has(a.callFunction))
-        .map((a) => ({ invariant: "function-exists", file: s.rel, message: `calls function "${a.callFunction}", which doesn't exist` })));
+      const calls = p.items("eventSheets").flatMap((s) => allEvents(s.json.events).flatMap(acesOf)
+        .filter((a) => a.callFunction !== undefined && !fns.has(a.callFunction)).map((a) => ({ file: s.rel, a })));
+      return perName(calls, (x) => x.file, (x) => x.a.callFunction).map(({ file, name, xs }) => ({
+        invariant: "function-exists", file,
+        message: xs.length === 1 ? `calls function "${name}", which doesn't exist` : `${xs.length} calls to function "${name}", which doesn't exist`,
+      }));
     },
   },
   {

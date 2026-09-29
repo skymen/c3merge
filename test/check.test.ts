@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cp, mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { checkProject, invariants } from "../src/check/index.ts";
@@ -53,6 +53,22 @@ test("tilemaps with hidden cells and flipped tiles are fine", async () => {
     await corruptions.find((c) => c.row === "29c")!.apply(dir);
     const r = await checkProject(dir, { all: true });
     assert.deepEqual(r.findings.filter((f) => f.invariant.startsWith("tilemap")), []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("instances of one missing type: one finding per file, with the count", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "c3merge-test-"));
+  try {
+    await cp(BASE, dir, { recursive: true });
+    const f = path.join(dir, "layouts/Layout 1.json");
+    const l = JSON.parse(await readFile(f, "utf8"));
+    for (const i of l.layers[0].instances) i.type = "Enemy";
+    await writeFile(f, JSON.stringify(l, null, "\t"));
+    const uids = l.layers[0].instances.map((i: any) => i.uid);
+    const hits = (await checkProject(dir)).findings.filter((x) => x.invariant === "instance-type-exists");
+    assert.deepEqual(hits.map((h) => h.message), [`${uids.length} instances have type "Enemy", which doesn't exist (uids ${uids.join(", ")})`]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

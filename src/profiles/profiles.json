@@ -9,6 +9,7 @@
     "`lines` = a list of text lines, merged line by line like git (overlapping edits → conflict).",
     "`tiles` = a tilemap's tilemapData: merged tile by tile (src/engine/tiles.ts).",
     "`atomic` = merge as one value (changed on both sides → conflict). `scalar: 'max'` = take the larger number.",
+    "`ours` = display text C3 rewrites by itself (addon names, in the editor's language, on every save): changed differently on both sides → ours; a change to it alone isn't an edit.",
     "`also` = a second exact key: an element whose id changed on one side (uid renumbered) is still matched by it.",
     "`moves` = elements can move between lists of this kind in one file (instances between layers).",
     "`repeats` = elements identified by their content may appear more than once (identical comments): they don't make the list atomic; each copy is placed by the nearest non-repeated element above it.",
@@ -22,6 +23,7 @@
       "rules": {
         "savedWithRelease": { "scalar": "max" },
         "usedAddons[]": { "id": ["type+id"], "order": "set" },
+        "usedAddons[].name": { "ours": true },
         "objectTypes.items[]": { "id": ["content"], "order": "set" },
         "objectTypes.subfolders[]": { "id": ["name"], "order": "set" },
         "objectTypes.subfolders[].items[]": { "id": ["content"], "order": "set" },

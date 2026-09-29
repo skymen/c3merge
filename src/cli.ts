@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // c3merge: structural merge and validation for Construct 3 projects.
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { parseArgs } from "node:util";
 import { checkProject, invariants, severityOf } from "./check/index.ts";
 import { c3mergeCommand, doctor, HOOKS, init, install, installHooks, mergeDriver, runningFromNpx } from "./driver.ts";
+import { resolveBranches } from "./engine/render.ts";
 import { describe, finishWithCheck } from "./finish.ts";
 
 const [command, ...rest] = process.argv.slice(2);
@@ -68,9 +71,35 @@ async function main(): Promise<number> {
     if (after === "manual" && !lines.length) console.log("c3merge finish: no renames to replay");
     return 0;
   }
+  if (command === "resolve") {
+    // Take one side at every ours/theirs hunk of a conflicted file, keeping what merged
+    // cleanly (unlike `git checkout --ours`). Not staged: the person looks, then `git add`.
+    const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { ours: { type: "boolean" }, theirs: { type: "boolean" } } });
+    if (!positionals.length || !!values.ours === !!values.theirs) { console.error("usage: c3merge resolve <file>... --ours | --theirs"); return 2; }
+    const which = values.ours ? "ours" : "theirs";
+    let gitDir: string | null = null;
+    try { gitDir = execFileSync("git", ["rev-parse", "--absolute-git-dir"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { /* not in a repo */ }
+    if (gitDir && ["rebase-merge", "rebase-apply"].some((d) => existsSync(path.join(gitDir!, d)))) {
+      console.log("c3merge resolve: a rebase is in progress, so ours is the branch being rebased onto and theirs the commits being replayed");
+    }
+    let code = 0;
+    for (const file of positionals) {
+      const r = resolveBranches(readFileSync(file, "utf8"), which);
+      if (!r.resolved && !r.left.length) { console.log(`${file}: no conflict markers`); continue; }
+      if (!r.left.length && /\.(json|c3proj)$/i.test(file)) {
+        try { JSON.parse(r.text); } catch (e) { console.error(`${file}: taking ${which} everywhere doesn't give valid JSON (${(e as Error).message}); left as it is`); code = 2; continue; }
+      }
+      writeFileSync(file, r.text);
+      console.log(`${file}: took ${which} at ${r.resolved} conflict(s)` + (r.left.length
+        ? `; ${r.left.length} left for you (${[...new Set(r.left)].join(", ")}): see .git/c3merge/conflicts.md`
+        : "; `git add` it, then run `c3merge finish`"));
+      if (r.left.length && code === 0) code = 1;
+    }
+    return code;
+  }
   if (command === "doctor") {
     const lines = doctor();
-    for (const l of lines) console.log(`${l.ok ? "ok " : "!! "} ${l.text}${l.fix ? `\n     fix: ${l.fix}` : ""}`);
+    for (const l of lines) console.log(`${l.warn ? "!  " : l.ok ? "ok " : "!! "} ${l.text}${l.fix ? `\n     fix: ${l.fix}` : ""}`);
     return lines.every((l) => l.ok) ? 0 : 1;
   }
   if (command === "invariants") {
@@ -85,6 +114,7 @@ async function main(): Promise<number> {
     "       c3merge init                   .gitattributes (committed) and hooks (this clone)",
     "       c3merge doctor                 check the setup",
     "       c3merge finish                 replay renames after a merge (hooks run it for you)",
+    "       c3merge resolve <file>... --ours | --theirs   one side at every ours/theirs conflict, the rest kept",
     "       c3merge check <project> [--json | --github] [--all]",
     "       c3merge invariants",
     "       c3merge merge-driver %O %A %B %P   (called by git)",

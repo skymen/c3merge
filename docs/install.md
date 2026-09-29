@@ -117,10 +117,15 @@ ok  git version 2.50.1
 ok  merge driver: '/usr/local/bin/node' '/usr/local/lib/node_modules/c3merge/bin/c3merge.js' merge-driver %O %A %B %P
 ok  hooks: finish step after merges and rebases
 ok  .gitattributes: game/project.c3proj uses the c3 driver
+!   game/project.c3proj: new objects get increasing UIDs (UID numbering "increment"), so two branches hand out the same ones and c3merge sees two different instances as one
+     fix: in Construct: Project Properties → Advanced → UID numbering → Random, then save and commit
 ```
 
-Each line that isn't `ok` comes with the command that fixes it. The exit code is 0 when
-everything is ok.
+Each line marked `!!` comes with the command that fixes it; the exit code is 0 when there
+are none. A line marked `!` is advice and doesn't change the exit code: here, a project
+whose UIDs aren't random (old projects have no setting at all). Every branch then gives its
+new instances the same next UIDs, and c3merge takes two different instances for one and
+conflicts on every field. Switching to random only affects new instances.
 
 ## Teammates
 
