@@ -31,8 +31,8 @@ already accepted. Scripts in `fixtures/real/common/` (`timing.ts`, `timing-warm.
   (UTRS: 161 s → 4 s). No shared profile needed.
 - The project's size sets the rest: errors in `project.c3proj` show in 3–4 s, errors inside
   layouts only once C3 reaches them (53 s on biogun).
-- Don't use c3cli's Save as for the re-save: it rewrites `bundleAddons` and unbundles every
-  addon (c3cli backlog). Plain save, or fix it first.
+- A re-save needs a logged-in profile: in the free edition C3 saves `bundleAddons: false`
+  and unbundles every addon (bundling is a paid feature; c3cli backlog). Opening is fine.
 - c3cli opens by drop, which old editors don't take (biogun's r336, trubija's r351, Astral
   Ascent's r2xx): no C3 step for projects that can't open on their own release.
 
