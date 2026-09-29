@@ -87,6 +87,21 @@ Replay method, learned the hard way on con-sule. Shared scripts now in `fixtures
   objectTypes/ScirraArcade.json"). `check`'s listed-file-missing rule and an open in C3 both
   catch it.
 
+## Rerun on 95aeeac (2026-09-29)
+Every replay rerun on the new engine (reused names, project-bar folders, addon names, same-path
+guard), outputs in `<project>/out-0929`. Merges needing a person, git → c3merge, before → now:
+Astral Ascent 379 → 260 became 379 → 259 (an addon removed on one side, only renamed on the
+other); con-sule 47 → 31 became 47 → 27 (4 addon-name conflicts gone, "worse" 1 → 0); biogun,
+UTRS, Stardiver, Vicky, trubija, Flechita unchanged. No clean merge became wrong. What changed:
+- New conflicts, all right: items put in a different project-bar folder on each side (con-sule
+  `290b956ab`, `4ce7cd9f6`, `038d591d6`; Vicky and trubija open branches: 24 items), which C3
+  refuses; and files holding a different object on each side, which used to merge by mixing
+  both: UTRS `bed9c447d` (`testChar.json` paired by git's rename detection with
+  `characterTest.json`; git conflicted too, the committed result is theirs), trubija's open
+  `main` (`PlayerZ`, `DebugVisibility` created on both sides).
+- Fewer conflicts: those same-path files collapse to one whole-file conflict (biogun's open
+  branches 473 → 142 conflicts in the same 58 files).
+
 ## Vicky, trubija, Flechita (2026-09-26)
 clovelt's repos, cloned with push disabled at `~/Documents/<name>-c3merge-test`, replayed with
 `common/` (`--all --branches`). Small: 2–5 devs, plain merge commits.
